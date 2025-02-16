@@ -1,13 +1,20 @@
-#define _GNU_SOURCE
+#include <stdio.h> // for fprintf, stderr
+#include <stdint.h> // for uint64_t
+#include <stdlib.h> // for exit, EXIT_FAILURE
 
-#include <sys/mman.h> // for mmap, PROT_READ, PROT_WRITE, MAP_PRIVATE, MAP_ANONYMOUS, MAP_FAILED
-#include <unistd.h>   // for getpagesize
-#include <stdlib.h>   // for exit, EXIT_FAILURE
+// Maybe should be packed, but will be fine as long as everything remains 8-byte
+struct abisan_shadow_stack_frame {
+    uint64_t rbx;
+    uint64_t rbp;
+    uint64_t rsp;
+    uint64_t retaddr;
+};
 
-static void __attribute__((constructor)) abisan_runtime_init(void) {
-    // Shadow stack
-    void *mmap_rc = mmap((void *)0xdadf000, getpagesize(), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
-    if (mmap_rc == MAP_FAILED) {
-        exit(EXIT_FAILURE);
-    }
+#define SHADOW_STACK_SIZE (10)
+struct abisan_shadow_stack_frame ABISAN_SHADOW_STACK_BASE[SHADOW_STACK_SIZE];
+struct abisan_shadow_stack_frame *abisan_shadow_stack_pointer = ABISAN_SHADOW_STACK_BASE;
+
+[[noreturn]] void abisan_fail(void) {
+    fprintf(stderr, "ABISan: Callee-preserved register has been modified!\n");
+    exit(EXIT_FAILURE);
 }
