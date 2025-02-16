@@ -2,7 +2,7 @@
 
 .globl f
 f:
-    # inc rbx # Uncomment me to see what happens when you clobber rbx
+    inc rbx # Violates the ABI
     add rdi, rsi
     mov rax, rdi
     ret
