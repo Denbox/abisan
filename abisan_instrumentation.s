@@ -8,10 +8,9 @@
 abisan_function_entry:
     mov r11, offset abisan_shadow_stack_pointer[rip]
 
-    # Save rbx, rbp, and rsp into the frame
+    # Save rbx, rbp, and rsp+8 into the frame
     mov QWORD PTR [r11 + 0x0], rbx
     mov QWORD PTR [r11 + 0x8], rbp
-
     add rsp, 8
     mov QWORD PTR [r11 + 0x10], rsp
     sub rsp, 8
