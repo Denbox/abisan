@@ -1,15 +1,1 @@
-# ABISanitizer Proof-of-Concept
-
-This is a minimal PoC for ABISan.
-
-# Running
-
-1. `make`
-2. Use a hex editor to replace the first two instructions in f with a call to abisan_f_instrumentation_entry
-3. `./test`, and observe that the program exits 1 because rbx was clobbered.
-
-# Next steps
-
-- Support dynamic linking
-- Automate the patching
-- Print a useful error message.
+# ABI Sanitizer
