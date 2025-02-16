@@ -1,6 +1,6 @@
 .intel_syntax noprefix
 
-.set SHADOW_STACK_FRAME_SIZE, 64 # XXX: Make sure this stays in sync with sizeof(struct abisan_shadow_stack_frame)
+.set SHADOW_STACK_FRAME_SIZE, 72 # XXX: Make sure this stays in sync with sizeof(struct abisan_shadow_stack_frame)
 .set FRAME_RETADDR, 0x00
 .set FRAME_RBX,     0x08
 .set FRAME_RBP,     0x10
@@ -9,6 +9,7 @@
 .set FRAME_R13,     0x28
 .set FRAME_R14,     0x30
 .set FRAME_R15,     0x38
+.set INSTRUMENTATION_RETADDR, 0x40
 
 .extern abisan_shadow_stack_pointer
 
@@ -27,9 +28,13 @@ abisan_function_entry:
     mov QWORD PTR [r11 + FRAME_R14], r14
     mov QWORD PTR [r11 + FRAME_R15], r15
 
-    # Save the return address into the frame
+    # Save calling functions' return address into the frame
     mov rbx, QWORD PTR [rsp + 0x8]
     mov QWORD PTR [r11 + FRAME_RETADDR], rbx
+
+    # Save our return address into the frame (used for debugging purposes only)
+    mov rbx, QWORD PTR [rsp]
+    mov QWORD PTR [r11 + INSTRUMENTATION_RETADDR], rbx
 
     # Replace the return address on the stack with abisan_function_exit
     lea rbx, offset abisan_function_exit[rip]
@@ -48,25 +53,26 @@ abisan_function_entry:
 abisan_function_exit:
     sub rsp, 0x8 # To make up for the fact that this is returned into
 
-    mov r11, offset abisan_shadow_stack_pointer[rip]
-    sub r11, SHADOW_STACK_FRAME_SIZE
+    mov rdi, offset abisan_shadow_stack_pointer[rip]
+    sub rdi, SHADOW_STACK_FRAME_SIZE
+    mov QWORD PTR offset abisan_shadow_stack_pointer[rip], rdi
 
-    cmp rbx, QWORD PTR [r11 + FRAME_RBX]
+    cmp rbx, QWORD PTR [rdi + FRAME_RBX]
     jne abisan_fail_rbx
-    cmp rbp, QWORD PTR [r11 + FRAME_RBP]
+    cmp rbp, QWORD PTR [rdi + FRAME_RBP]
     jne abisan_fail_rbp
-    cmp rsp, QWORD PTR [r11 + FRAME_RSP]
+    cmp rsp, QWORD PTR [rdi + FRAME_RSP]
     jne abisan_fail_rsp
-    cmp r12, QWORD PTR [r11 + FRAME_R12]
+    cmp r12, QWORD PTR [rdi + FRAME_R12]
     jne abisan_fail_r12
-    cmp r13, QWORD PTR [r11 + FRAME_R13]
+    cmp r13, QWORD PTR [rdi + FRAME_R13]
     jne abisan_fail_r13
-    cmp r14, QWORD PTR [r11 + FRAME_R14]
+    cmp r14, QWORD PTR [rdi + FRAME_R14]
     jne abisan_fail_r14
-    cmp r15, QWORD PTR [r11 + FRAME_R15]
+    cmp r15, QWORD PTR [rdi + FRAME_R15]
     jne abisan_fail_r15
 
     # Put the original return address back in place
-    mov r11, QWORD PTR [r11 + FRAME_RETADDR]
-    mov [rsp], r11
+    mov rdi, QWORD PTR [rdi + FRAME_RETADDR]
+    mov [rsp], rdi
     ret
