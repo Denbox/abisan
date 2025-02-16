@@ -1,2 +1,3 @@
 .gdb_history
 *.o
+*_instrumented_by_abisan.s

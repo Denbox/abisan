@@ -1,7 +1,8 @@
 #include <stdio.h>  // for fprintf, stderr
+#include <stdint.h> // for uint16_t
+#include <inttypes.h> // for PRIu16
 #include <stdlib.h> // for exit, EXIT_FAILURE
 
-// Maybe should be packed, but will be fine as long as everything remains 8-byte
 struct abisan_shadow_stack_frame {
     void *retaddr;
     void *rbx;
@@ -12,7 +13,9 @@ struct abisan_shadow_stack_frame {
     void *r14;
     void *r15;
     void *instrumentation_retaddr;
-};
+    uint16_t x87cw;
+    uint16_t fs;
+} __attribute__((packed));
 
 #define SHADOW_STACK_SIZE (10)
 struct abisan_shadow_stack_frame ABISAN_SHADOW_STACK_BASE[SHADOW_STACK_SIZE];
@@ -33,6 +36,8 @@ abisan_fail(char const *const msg,
     fprintf(stderr, "    Saved r13: %p\n", frame->r13);
     fprintf(stderr, "    Saved r14: %p\n", frame->r14);
     fprintf(stderr, "    Saved r15: %p\n", frame->r15);
+    fprintf(stderr, "    Saved x87 control word: 0x%" PRIx16 "\n", frame->x87cw);
+    fprintf(stderr, "    Saved fs: 0x%" PRIx16 "\n", frame->fs);
     exit(EXIT_FAILURE);
 }
 
@@ -69,4 +74,14 @@ abisan_fail_r14(struct abisan_shadow_stack_frame const *const frame) {
 [[noreturn]] void
 abisan_fail_r15(struct abisan_shadow_stack_frame const *const frame) {
     abisan_fail("r12 clobbered", frame);
+}
+
+[[noreturn]] void
+abisan_fail_x87cw(struct abisan_shadow_stack_frame const *const frame) {
+    abisan_fail("x86 control word clobbered", frame);
+}
+
+[[noreturn]] void
+abisan_fail_fs(struct abisan_shadow_stack_frame const *const frame) {
+    abisan_fail("fs clobbered", frame);
 }
