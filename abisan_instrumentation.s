@@ -75,25 +75,32 @@ abisan_function_exit:
     cmp si, WORD PTR [rdi + FRAME_FS]
     jne abisan_fail_fs
 
-    cmp rbx, QWORD PTR [rdi + FRAME_RBX]
+    mov rsi, rbx
+    cmp rsi, QWORD PTR [rdi + FRAME_RBX]
     jne abisan_fail_rbx
     
-    cmp rbp, QWORD PTR [rdi + FRAME_RBP]
+    mov rsi, rbp
+    cmp rsi, QWORD PTR [rdi + FRAME_RBP]
     jne abisan_fail_rbp
     
-    cmp rsp, QWORD PTR [rdi + FRAME_RSP]
+    mov rsi, rsp
+    cmp rsi, QWORD PTR [rdi + FRAME_RSP]
     jne abisan_fail_rsp
     
-    cmp r12, QWORD PTR [rdi + FRAME_R12]
+    mov rsi, r12
+    cmp rsi, QWORD PTR [rdi + FRAME_R12]
     jne abisan_fail_r12
     
-    cmp r13, QWORD PTR [rdi + FRAME_R13]
+    mov rsi, rdi
+    cmp rsi, QWORD PTR [rdi + FRAME_R13]
     jne abisan_fail_r13
     
-    cmp r14, QWORD PTR [rdi + FRAME_R14]
+    mov rsi, r14
+    cmp rsi, QWORD PTR [rdi + FRAME_R14]
     jne abisan_fail_r14
     
-    cmp r15, QWORD PTR [rdi + FRAME_R15]
+    mov rsi, r15
+    cmp rsi, QWORD PTR [rdi + FRAME_R15]
     jne abisan_fail_r15
 
     # Put the original return address back in place

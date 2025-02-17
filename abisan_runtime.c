@@ -1,17 +1,17 @@
-#include <stdio.h>  // for fprintf, stderr
-#include <stdint.h> // for uint16_t
-#include <inttypes.h> // for PRIx16
-#include <stdlib.h> // for exit, EXIT_FAILURE
+#include <inttypes.h> // for PRIx16, PRIx64
+#include <stdint.h>   // for uint16_t, uint64_t
+#include <stdio.h>    // for fprintf, stderr
+#include <stdlib.h>   // for exit, EXIT_FAILURE
 
 struct abisan_shadow_stack_frame {
     void *retaddr;
-    void *rbx;
-    void *rbp;
-    void *rsp;
-    void *r12;
-    void *r13;
-    void *r14;
-    void *r15;
+    uint64_t rbx;
+    uint64_t rbp;
+    uint64_t rsp;
+    uint64_t r12;
+    uint64_t r13;
+    uint64_t r14;
+    uint64_t r15;
     void *instrumentation_retaddr;
     uint16_t x87cw;
     uint16_t fs;
@@ -23,65 +23,78 @@ struct abisan_shadow_stack_frame *abisan_shadow_stack_pointer =
     ABISAN_SHADOW_STACK_BASE;
 
 [[noreturn]] void
-abisan_fail(char const *const msg,
+abisan_fail(char const *const clobbered_register,
+            uint64_t const clobbered_value,
             struct abisan_shadow_stack_frame const *const frame) {
     fprintf(stderr,
-            "ABISan: %s by the function at address %p, which was called at "
+            "ABISan: %s clobbered with 0x%" PRIx64
+            " by the function at address %p, which was called at "
             "address %p.\n",
-            msg, frame->instrumentation_retaddr, frame->retaddr);
-    fprintf(stderr, "    Saved rbx: %p\n", frame->rbx);
-    fprintf(stderr, "    Saved rbp: %p\n", frame->rbp);
-    fprintf(stderr, "    Saved rsp: %p\n", frame->rsp);
-    fprintf(stderr, "    Saved r12: %p\n", frame->r12);
-    fprintf(stderr, "    Saved r13: %p\n", frame->r13);
-    fprintf(stderr, "    Saved r14: %p\n", frame->r14);
-    fprintf(stderr, "    Saved r15: %p\n", frame->r15);
-    fprintf(stderr, "    Saved x87 control word: 0x%" PRIx16 "\n", frame->x87cw);
+            clobbered_register, clobbered_value, frame->instrumentation_retaddr,
+            frame->retaddr);
+    fprintf(stderr, "    Saved rbx: 0x%" PRIx64 "\n", frame->rbx);
+    fprintf(stderr, "    Saved rbp: 0x%" PRIx64 "\n", frame->rbp);
+    fprintf(stderr, "    Saved rsp: 0x%" PRIx64 "\n", frame->rsp);
+    fprintf(stderr, "    Saved r12: 0x%" PRIx64 "\n", frame->r12);
+    fprintf(stderr, "    Saved r13: 0x%" PRIx64 "\n", frame->r13);
+    fprintf(stderr, "    Saved r14: 0x%" PRIx64 "\n", frame->r14);
+    fprintf(stderr, "    Saved r15: 0x%" PRIx64 "\n", frame->r15);
+    fprintf(stderr, "    Saved x87 control word: 0x%" PRIx16 "\n",
+            frame->x87cw);
     fprintf(stderr, "    Saved fs: 0x%" PRIx16 "\n", frame->fs);
     exit(EXIT_FAILURE);
 }
 
 [[noreturn]] void
-abisan_fail_rbx(struct abisan_shadow_stack_frame const *const frame) {
-    abisan_fail("rbx clobbered", frame);
+abisan_fail_rbx(struct abisan_shadow_stack_frame const *const frame,
+                uint64_t rbx) {
+    abisan_fail("rbx", rbx, frame);
 }
 
 [[noreturn]] void
-abisan_fail_rbp(struct abisan_shadow_stack_frame const *const frame) {
-    abisan_fail("rbp clobbered", frame);
+abisan_fail_rbp(struct abisan_shadow_stack_frame const *const frame,
+                uint64_t rbp) {
+    abisan_fail("rbp", rbp, frame);
 }
 
 [[noreturn]] void
-abisan_fail_rsp(struct abisan_shadow_stack_frame const *const frame) {
-    abisan_fail("rsp clobbered", frame);
+abisan_fail_rsp(struct abisan_shadow_stack_frame const *const frame,
+                uint64_t rsp) {
+    abisan_fail("rsp", rsp, frame);
 }
 
 [[noreturn]] void
-abisan_fail_r12(struct abisan_shadow_stack_frame const *const frame) {
-    abisan_fail("r12 clobbered", frame);
+abisan_fail_r12(struct abisan_shadow_stack_frame const *const frame,
+                uint64_t r12) {
+    abisan_fail("r12", r12, frame);
 }
 
 [[noreturn]] void
-abisan_fail_r13(struct abisan_shadow_stack_frame const *const frame) {
-    abisan_fail("r12 clobbered", frame);
+abisan_fail_r13(struct abisan_shadow_stack_frame const *const frame,
+                uint64_t r13) {
+    abisan_fail("r13", r13, frame);
 }
 
 [[noreturn]] void
-abisan_fail_r14(struct abisan_shadow_stack_frame const *const frame) {
-    abisan_fail("r12 clobbered", frame);
+abisan_fail_r14(struct abisan_shadow_stack_frame const *const frame,
+                uint64_t r14) {
+    abisan_fail("r14", r14, frame);
 }
 
 [[noreturn]] void
-abisan_fail_r15(struct abisan_shadow_stack_frame const *const frame) {
-    abisan_fail("r12 clobbered", frame);
+abisan_fail_r15(struct abisan_shadow_stack_frame const *const frame,
+                uint64_t r15) {
+    abisan_fail("r15", r15, frame);
 }
 
 [[noreturn]] void
-abisan_fail_x87cw(struct abisan_shadow_stack_frame const *const frame) {
-    abisan_fail("x86 control word clobbered", frame);
+abisan_fail_x87cw(struct abisan_shadow_stack_frame const *const frame,
+                  uint16_t x87cw) {
+    abisan_fail("x87 control word", x87cw, frame);
 }
 
 [[noreturn]] void
-abisan_fail_fs(struct abisan_shadow_stack_frame const *const frame) {
-    abisan_fail("fs clobbered", frame);
+abisan_fail_fs(struct abisan_shadow_stack_frame const *const frame,
+               uint16_t fs) {
+    abisan_fail("fs", fs, frame);
 }
