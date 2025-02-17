@@ -91,7 +91,7 @@ abisan_function_exit:
     cmp rsi, QWORD PTR [rdi + FRAME_R12]
     jne abisan_fail_r12
     
-    mov rsi, rdi
+    mov rsi, r13
     cmp rsi, QWORD PTR [rdi + FRAME_R13]
     jne abisan_fail_r13
     
