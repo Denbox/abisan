@@ -2,3 +2,4 @@
 *.o
 *_instrumented_by_abisan.s
 test
+*.a

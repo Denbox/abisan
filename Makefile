@@ -9,13 +9,16 @@ fmt:
 	clang-format --style='{IndentWidth: 4, AllowShortFunctionsOnASingleLine: false}' -i *.c *.h
 
 clean:
-	rm -f *.o *_instrumented_by_abisan.s test
+	rm -f *.a *.o *_instrumented_by_abisan.s test
 
 abisan_runtime.o: abisan_runtime.c
 	$(CC) -c $(CFLAGS) $^ -o $@
 
 abisan_instrumentation.o: abisan_instrumentation.s
 	$(CC) -c $(CFLAGS) $^ -o $@
+
+libabisan_runtime.a: abisan_runtime.o abisan_instrumentation.o
+	$(AR) rs $@ $^
 
 f.o: f.s
 	python3 instrument.py $^ > $^_instrumented_by_abisan.s
@@ -25,5 +28,5 @@ f.o: f.s
 main.o: main.c
 	$(CC) -c $(CFLAGS) $^ -o $@
 
-test: main.o f.o abisan_instrumentation.o abisan_runtime.o
+test: main.o f.o libabisan_runtime.a
 	$(CC) $(CFLAGS) $^ -o $@
