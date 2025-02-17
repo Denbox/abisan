@@ -1,6 +1,6 @@
 #include <stdio.h>  // for fprintf, stderr
 #include <stdint.h> // for uint16_t
-#include <inttypes.h> // for PRIu16
+#include <inttypes.h> // for PRIx16
 #include <stdlib.h> // for exit, EXIT_FAILURE
 
 struct abisan_shadow_stack_frame {
