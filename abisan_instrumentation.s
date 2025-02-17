@@ -1,6 +1,7 @@
 .intel_syntax noprefix
 
 .set SHADOW_STACK_FRAME_SIZE, 72 # XXX: Make sure this stays in sync with sizeof(struct abisan_shadow_stack_frame)
+# Offsets of fields within the shadow stack frame struct
 .set FRAME_RETADDR, 0x00
 .set FRAME_RBX, 0x08
 .set FRAME_RBP, 0x10
@@ -31,12 +32,13 @@ abisan_function_entry:
     mov QWORD PTR [r11 + FRAME_R15], r15
     fnstcw [r11 + FRAME_X87CW]
     mov WORD PTR [r11 + FRAME_FS], fs
+    # Now that rbx is saved in the shadow stack, we'll be using it as a temporary
 
-    # Save calling functions' return address into the frame
+    # Save calling function's return address into the frame for later restoration
     mov rbx, QWORD PTR [rsp + 0x8]
     mov QWORD PTR [r11 + FRAME_RETADDR], rbx
 
-    # Save our return address into the frame (used for debugging purposes only)
+    # Save our return address into the frame for debugging purposes
     mov rbx, QWORD PTR [rsp]
     mov QWORD PTR [r11 + FRAME_INSTRUMENTATION_RETADDR], rbx
 
@@ -55,22 +57,22 @@ abisan_function_entry:
 
 .globl abisan_function_exit
 abisan_function_exit:
-    sub rsp, 0x8 # To make up for the fact that this is returned into
+    sub rsp, 0x8 # We never add this back to rsp to make up for the fact that this function is returned into. We'll also use this local space for fnstcw and its ilk
 
+    # Because this is returned into, it's good to clobber anything and everything
+    # that a function is allowed to clobber. Also, we use rdi to store the current
+    # shadow stack frame because it's the first argument to the abisan_fail_X functions
     mov rdi, offset abisan_shadow_stack_pointer[rip]
     sub rdi, SHADOW_STACK_FRAME_SIZE
     mov QWORD PTR offset abisan_shadow_stack_pointer[rip], rdi
 
-    # Save the x87 control word at [rsp]
-    # This is safe to do because we're going to overwrite the return
-    # address anyway
     fnstcw [rsp]
     mov si, WORD PTR [rsp]
-    cmp si, [rdi + FRAME_X87CW]
+    cmp si, WORD PTR [rdi + FRAME_X87CW]
     jne abisan_fail_x87cw
 
     mov si, fs
-    cmp si, [rdi + FRAME_FS]
+    cmp si, WORD PTR [rdi + FRAME_FS]
     jne abisan_fail_fs
 
     cmp rbx, QWORD PTR [rdi + FRAME_RBX]
