@@ -19,7 +19,7 @@ def main() -> None:
             next_line = b"    "
         sys.stdout.buffer.write(line)
         tokens: list[bytes] = line.split()
-        if len(tokens) == 1 and tokens[0].endswith(b":") and tokens[0][:-1] in symbols:
+        if len(tokens) >= 1 and tokens[0].endswith(b":") and tokens[0][:-1] in symbols:
             whitespace_prefix_match: re.Match[bytes] | None = re.match(rb"^(?P<whitespace_prefix>\s*)", next_line)
             assert whitespace_prefix_match is not None
             whitespace_prefix: bytes = whitespace_prefix_match["whitespace_prefix"]
