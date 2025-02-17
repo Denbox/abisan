@@ -6,7 +6,7 @@ CFLAGS := -Wall -Wextra -Wpedantic -Wvla -O0 -std=c23
 all: test abisan_test
 
 fmt:
-	clang-format --style='{IndentWidth: 4, AllowShortFunctionsOnASingleLine: false}' -i *.c *.h
+	clang-format --style='{IndentWidth: 4, AllowShortFunctionsOnASingleLine: false}' -i *.c
 
 clean:
 	rm -f *.a *.o *_instrumented_by_abisan.s test abisan_test
