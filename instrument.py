@@ -16,6 +16,8 @@ def get_global(line: bytes) -> bytes | None:
     return None
 
 
+CALL_ABISAN: bytes = b"call abisan_function_entry\n"
+
 def main() -> None:
     if len(sys.argv) != 2:
         print(f"Usage: python3 {sys.argv[0]} <assembly_file>", file=sys.stderr)
@@ -32,6 +34,8 @@ def main() -> None:
         for j in range(i, len(lines)):
             if not lines[j].isspace() and get_label(lines[j]) is None:
                 next_line = lines[j]
+        if next_line.endswith(CALL_ABISAN): # If this function is already instrumented, keep going
+            continue
         sys.stdout.buffer.write(line)
         if get_label(line) in global_symbols:
             whitespace_prefix_match: re.Match[bytes] | None = re.match(
@@ -39,7 +43,7 @@ def main() -> None:
             )
             assert whitespace_prefix_match is not None
             whitespace_prefix: bytes = whitespace_prefix_match["whitespace_prefix"]
-            sys.stdout.buffer.write(whitespace_prefix + b"call abisan_function_entry\n")
+            sys.stdout.buffer.write(whitespace_prefix + CALL_ABISAN)
 
 
 if __name__ == "__main__":
