@@ -30,20 +30,11 @@ def main() -> None:
     global_symbols: list[bytes] = [symbol for symbol in map(get_global, lines) if symbol is not None]
 
     for i, line in enumerate(lines):
-        next_line: bytes = b"    "  # The next nonempty, non-label line (used to infer indentation)
-        for j in range(i, len(lines)):
-            if not lines[j].isspace() and get_label(lines[j]) is None:
-                next_line = lines[j]
-        if next_line.endswith(CALL_ABISAN): # If this function is already instrumented, keep going
+        if i != len(lines) - 1 and lines[i + 1].endswith(CALL_ABISAN): # If this function is already instrumented, keep going
             continue
         sys.stdout.buffer.write(line)
         if get_label(line) in global_symbols:
-            whitespace_prefix_match: re.Match[bytes] | None = re.match(
-                rb"^(?P<whitespace_prefix>\s*)", next_line
-            )
-            assert whitespace_prefix_match is not None
-            whitespace_prefix: bytes = whitespace_prefix_match["whitespace_prefix"]
-            sys.stdout.buffer.write(whitespace_prefix + CALL_ABISAN)
+            sys.stdout.buffer.write(CALL_ABISAN)
 
 
 if __name__ == "__main__":
