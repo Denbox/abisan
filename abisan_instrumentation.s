@@ -118,4 +118,22 @@ abisan_function_exit:
     mov r10, 0x4141414141414141
     mov r11, 0x4141414141414141
 
+    # Clobber the red zone
+    mov QWORD PTR [rsp - 0x08], rcx
+    mov QWORD PTR [rsp - 0x10], rcx
+    mov QWORD PTR [rsp - 0x18], rcx
+    mov QWORD PTR [rsp - 0x20], rcx
+    mov QWORD PTR [rsp - 0x28], rcx
+    mov QWORD PTR [rsp - 0x30], rcx
+    mov QWORD PTR [rsp - 0x38], rcx
+    mov QWORD PTR [rsp - 0x40], rcx
+    mov QWORD PTR [rsp - 0x48], rcx
+    mov QWORD PTR [rsp - 0x50], rcx
+    mov QWORD PTR [rsp - 0x58], rcx
+    mov QWORD PTR [rsp - 0x60], rcx
+    mov QWORD PTR [rsp - 0x68], rcx
+    mov QWORD PTR [rsp - 0x70], rcx
+    mov QWORD PTR [rsp - 0x78], rcx
+    mov QWORD PTR [rsp - 0x80], rcx
+
     ret
