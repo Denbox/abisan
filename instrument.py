@@ -1,6 +1,12 @@
 import sys
 import re
-import itertools
+
+
+def get_label(line: bytes) -> bytes | None:
+    tokens: list[bytes] = line.split()
+    if len(tokens) >= 1 and tokens[0].endswith(b":"):
+        return tokens[0][:-1]
+    return None
 
 
 def main() -> None:
@@ -19,12 +25,13 @@ def main() -> None:
         if len(tokens) >= 2 and tokens[0].lower() in (b".globl", b".global") and tokens[1] != b"_start"
     ]
 
-    for line, next_line in itertools.zip_longest(lines, lines[1:]):
-        if next_line is None:
-            next_line = b"    "
+    for i, line in enumerate(lines):
+        next_line: bytes = b"    "
+        for j in range(i, len(lines)):
+            if not lines[j].isspace() and get_label(lines[j]) is None:
+                next_line = lines[j]
         sys.stdout.buffer.write(line)
-        tokens: list[bytes] = line.split()
-        if len(tokens) >= 1 and tokens[0].endswith(b":") and tokens[0][:-1] in symbols:
+        if get_label(line) in symbols:
             whitespace_prefix_match: re.Match[bytes] | None = re.match(
                 rb"^(?P<whitespace_prefix>\s*)", next_line
             )
