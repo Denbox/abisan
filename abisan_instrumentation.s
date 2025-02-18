@@ -1,6 +1,6 @@
 .intel_syntax noprefix
 
-.set SHADOW_STACK_FRAME_SIZE, 72 # XXX: Make sure this stays in sync with sizeof(struct abisan_shadow_stack_frame)
+.set SHADOW_STACK_FRAME_SIZE, 80 # XXX: Make sure this stays in sync with sizeof(struct abisan_shadow_stack_frame)
 # Offsets of fields within the shadow stack frame struct
 .set FRAME_RETADDR, 0x00
 .set FRAME_RBX, 0x08
@@ -13,6 +13,7 @@
 .set FRAME_INSTRUMENTATION_RETADDR, 0x40
 .set FRAME_X87CW, 0x48
 .set FRAME_FS, 0x4a
+.set FRAME_MXCSR, 0x4c
 
 .extern abisan_shadow_stack_pointer
 
@@ -32,6 +33,8 @@ abisan_function_entry:
     mov QWORD PTR [r11 + FRAME_R15], r15
     fnstcw [r11 + FRAME_X87CW]
     mov WORD PTR [r11 + FRAME_FS], fs
+    stmxcsr DWORD PTR [r11 + FRAME_MXCSR]
+    and DWORD PTR [r11 + FRAME_MXCSR], 0xffe0
     # Now that rbx is saved in the shadow stack, we'll be using it as a temporary
 
     # Save calling function's return address into the frame for later restoration
@@ -70,6 +73,12 @@ abisan_function_exit:
     mov si, WORD PTR [rsp]
     cmp si, WORD PTR [rdi + FRAME_X87CW]
     jne abisan_fail_x87cw
+
+    stmxcsr DWORD PTR [rsp]
+    mov esi, DWORD PTR [rsp]
+    and esi, 0xffe0
+    cmp esi, DWORD PTR [rdi + FRAME_MXCSR]
+    jne abisan_fail_mxcsr
 
     mov si, fs
     cmp si, WORD PTR [rdi + FRAME_FS]

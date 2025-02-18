@@ -15,6 +15,7 @@ struct abisan_shadow_stack_frame {
     void *instrumentation_retaddr;
     uint16_t x87cw;
     uint16_t fs;
+    uint32_t mxcsr;
 } __attribute__((packed));
 
 #define SHADOW_STACK_SIZE (10)
@@ -23,7 +24,7 @@ struct abisan_shadow_stack_frame *abisan_shadow_stack_pointer =
     ABISAN_SHADOW_STACK_BASE;
 
 [[noreturn]] void
-abisan_fail(char const *const clobbered_register,
+abisan_fail_clobber(char const *const clobbered_register,
             uint64_t const clobbered_value,
             struct abisan_shadow_stack_frame const *const frame) {
     fprintf(stderr,
@@ -48,53 +49,65 @@ abisan_fail(char const *const clobbered_register,
 [[noreturn]] void
 abisan_fail_rbx(struct abisan_shadow_stack_frame const *const frame,
                 uint64_t rbx) {
-    abisan_fail("rbx", rbx, frame);
+    abisan_fail_clobber("rbx", rbx, frame);
 }
 
 [[noreturn]] void
 abisan_fail_rbp(struct abisan_shadow_stack_frame const *const frame,
                 uint64_t rbp) {
-    abisan_fail("rbp", rbp, frame);
+    abisan_fail_clobber("rbp", rbp, frame);
 }
 
 [[noreturn]] void
 abisan_fail_rsp(struct abisan_shadow_stack_frame const *const frame,
                 uint64_t rsp) {
-    abisan_fail("rsp", rsp, frame);
+    abisan_fail_clobber("rsp", rsp, frame);
 }
 
 [[noreturn]] void
 abisan_fail_r12(struct abisan_shadow_stack_frame const *const frame,
                 uint64_t r12) {
-    abisan_fail("r12", r12, frame);
+    abisan_fail_clobber("r12", r12, frame);
 }
 
 [[noreturn]] void
 abisan_fail_r13(struct abisan_shadow_stack_frame const *const frame,
                 uint64_t r13) {
-    abisan_fail("r13", r13, frame);
+    abisan_fail_clobber("r13", r13, frame);
 }
 
 [[noreturn]] void
 abisan_fail_r14(struct abisan_shadow_stack_frame const *const frame,
                 uint64_t r14) {
-    abisan_fail("r14", r14, frame);
+    abisan_fail_clobber("r14", r14, frame);
 }
 
 [[noreturn]] void
 abisan_fail_r15(struct abisan_shadow_stack_frame const *const frame,
                 uint64_t r15) {
-    abisan_fail("r15", r15, frame);
+    abisan_fail_clobber("r15", r15, frame);
 }
 
 [[noreturn]] void
 abisan_fail_x87cw(struct abisan_shadow_stack_frame const *const frame,
                   uint16_t x87cw) {
-    abisan_fail("x87 control word", x87cw, frame);
+    abisan_fail_clobber("x87 control word", x87cw, frame);
 }
 
 [[noreturn]] void
 abisan_fail_fs(struct abisan_shadow_stack_frame const *const frame,
                uint16_t fs) {
-    abisan_fail("fs", fs, frame);
+    abisan_fail_clobber("fs", fs, frame);
+}
+
+[[noreturn]] void
+abisan_fail_mxcsr(struct abisan_shadow_stack_frame const *const frame,
+               uint16_t mxcsr) {
+    abisan_fail_clobber("mxcsr control bits", mxcsr, frame);
+}
+
+[[noreturn]] void
+abisan_fail_mov_below_rsp(void) {
+    fprintf(stderr, "You accessed below rsp! (This might be fine though, if you're using the red zone)\n");
+    exit(EXIT_FAILURE);
 }
