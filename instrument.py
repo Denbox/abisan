@@ -1,14 +1,40 @@
-import sys
+from enum import Enum
+import random
 import re
+import sys
 
 
-def get_memory_move_address(line: bytes) -> bytes | None:
+def remove_comment(line: bytes) -> bytes:
+    split_line: list[bytes] = line.split(b"#", maxsplit=1)
+    if len(split_line) > 0:
+        if split_line[0].endswith(b"'") and split_line[1].startswith(b"'"):
+            return split_line[0] + b"#" + remove_comment(split_line[1])
+        return split_line[0]
+    return line
+
+
+def get_memory_operand(line: bytes) -> bytes | None:
     tokens: list[bytes] = line.split(maxsplit=1)
     if len(tokens) != 2:
         return None
 
-    mnemonic: bytes = tokens[0]
-    if mnemonic != b"mov":
+    mnemonic: bytes = tokens[0].lower()
+    if mnemonic == b"lea":
+        return None
+
+    for operand in (token.strip() for token in tokens[1].split(b",")):
+        if b"[" in operand:
+            return operand
+    return None
+
+
+def get_memory_cmov_address_and_condition(line: bytes) -> tuple[bytes, bytes] | None:
+    tokens: list[bytes] = line.split(maxsplit=1)
+    if len(tokens) != 2:
+        return None
+
+    mnemonic: bytes = tokens[0].lower()
+    if not mnemonic.startswith(b"cmov"):
         return None
 
     operands: list[bytes] = [token.strip() for token in tokens[1].split(b",")]
@@ -17,18 +43,18 @@ def get_memory_move_address(line: bytes) -> bytes | None:
     if b"[" not in memory_operand:
         # This is a register-register mov
         return None
-    return memory_operand
+    return memory_operand, mnemonic[len("cmov"):]
 
 
 def get_label_name(line: bytes) -> bytes | None:
-    tokens: list[bytes] = line.split()
-    if len(tokens) >= 1 and tokens[0].endswith(b":"):
-        return tokens[0][:-1]
+    tokens: list[bytes] = line.split(b":", maxsplit=1)
+    if len(tokens) > 0:
+        return tokens[0]
     return None
 
 
 def get_global_name(line: bytes) -> bytes | None:
-    tokens: list[bytes] = line.split()
+    tokens: list[bytes] = line.split(maxsplit=2)
     if (
         len(tokens) >= 2
         and tokens[0].lower() in (b".globl", b".global")
@@ -38,11 +64,7 @@ def get_global_name(line: bytes) -> bytes | None:
     return None
 
 
-CALL_ABISAN: bytes = b"call abisan_function_entry\n"
-PUSH_FLAGS: bytes = b"pushfq\n"
-POP_FLAGS: bytes = b"popfq\n"
-PUSH_RAX: bytes = b"push rax\n"
-POP_RAX: bytes = b"pop rax\n"
+STACK_SIZE_THRESHOLD: int = 0x21000
 
 def main() -> None:
     if len(sys.argv) != 2:
@@ -57,22 +79,42 @@ def main() -> None:
         symbol for symbol in map(get_global_name, lines) if symbol is not None
     ]
 
-    for i, line in enumerate(lines):
-        move_address: bytes = get_memory_move_address(line)
-        if move_address is not None:
-            sys.stdout.buffer.write(PUSH_FLAGS)
-            sys.stdout.buffer.write(PUSH_RAX)
-            sys.stdout.buffer.write(b"lea rax, " + move_address + b"\n")
-            sys.stdout.buffer.write(b"cmp rax, rsp\n")
-            sys.stdout.buffer.write(b"jb abisan_fail_mov_below_rsp\n")
-            sys.stdout.buffer.write(POP_RAX)
-            sys.stdout.buffer.write(POP_FLAGS)
+    for i, line in enumerate(map(bytes.rstrip, map(remove_comment, lines))):
+        cmov_addr_and_condition: tuple[bytes, bytes] | None = get_memory_cmov_address_and_condition(line)
+        memory_operand: bytes | None = get_memory_operand(line)
+        if cmov_addr_and_condition is not None:
+            cmov_address, cmov_condition = cmov_addr_and_condition
+            random_number: int = random.randint(0, 2**64-1)
+            start_label: bytes = f"abisan_start_{random_number}".encode("ascii")
+            end_label: bytes = f"abisan_end_{random_number}".encode("ascii")
+            sys.stdout.buffer.write(b"    j" + cmov_condition + b" " + start_label + b"\n")
+            sys.stdout.buffer.write(b"    jmp " + end_label + b"\n")
+            sys.stdout.buffer.write(start_label + b":\n")
+            sys.stdout.buffer.write(b"    pushfq\n")
+            sys.stdout.buffer.write(b"    push rax\n")
+            sys.stdout.buffer.write(b"    lea rax, " + cmov_address + b"\n")
+            sys.stdout.buffer.write(b"    neg rax\n")
+            sys.stdout.buffer.write(b"    add rax, rsp\n")
+            sys.stdout.buffer.write(f"    cmp rax, {STACK_SIZE_THRESHOLD}\n".encode("ascii"))
+            sys.stdout.buffer.write(b"    jb abisan_fail_mov_below_rsp\n")
+            sys.stdout.buffer.write(b"    pop rax\n")
+            sys.stdout.buffer.write(b"    popfq\n")
+            sys.stdout.buffer.write(end_label + b":\n")
+        elif memory_operand is not None:
+            sys.stdout.buffer.write(b"    pushfq\n")
+            sys.stdout.buffer.write(b"    push rax\n")
+            sys.stdout.buffer.write(b"    lea rax, " + memory_operand + b"\n")
+            sys.stdout.buffer.write(b"    neg rax\n")
+            sys.stdout.buffer.write(b"    add rax, rsp\n")
+            sys.stdout.buffer.write(f"    cmp rax, {STACK_SIZE_THRESHOLD}\n".encode("ascii"))
+            sys.stdout.buffer.write(b"    jb abisan_fail_mov_below_rsp\n")
+            sys.stdout.buffer.write(b"    pop rax\n")
+            sys.stdout.buffer.write(b"    popfq\n")
 
-        sys.stdout.buffer.write(line)
-        if get_label_name(line) in global_symbols and (
-            i == len(lines) - 1 or not lines[i + 1].endswith(CALL_ABISAN)
-        ):
-            sys.stdout.buffer.write(CALL_ABISAN)
+        sys.stdout.buffer.write(line + b"\n")
+
+        if get_label_name(line) in global_symbols:
+            sys.stdout.buffer.write(b"    call abisan_function_entry\n")
 
 
 if __name__ == "__main__":
