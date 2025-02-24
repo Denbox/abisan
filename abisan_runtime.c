@@ -18,7 +18,7 @@ struct abisan_shadow_stack_frame {
     uint32_t mxcsr;
 } __attribute__((packed));
 
-#define SHADOW_STACK_SIZE (10)
+#define SHADOW_STACK_SIZE (1000)
 struct abisan_shadow_stack_frame ABISAN_SHADOW_STACK_BASE[SHADOW_STACK_SIZE];
 struct abisan_shadow_stack_frame *abisan_shadow_stack_pointer =
     ABISAN_SHADOW_STACK_BASE;

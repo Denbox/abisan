@@ -1,3 +1,4 @@
+import os
 import random
 import re
 import sys
@@ -70,6 +71,10 @@ def main() -> None:
         print(f"Usage: python3 {sys.argv[0]} <assembly_file>", file=sys.stderr)
         sys.exit(1)
 
+    _, infile_suffix = sys.argv[1].rsplit(".", maxsplit=1)
+    outfile: str = sys.argv[1] + ".abisan." + infile_suffix
+    fd: int = os.open(outfile, os.O_CREAT | os.O_WRONLY, mode=0o644)
+
     with open(sys.argv[1], "rb") as f:
         source_code: bytes = f.read()
 
@@ -83,36 +88,38 @@ def main() -> None:
         memory_operand: bytes | None = get_memory_operand(line)
         if cmov_addr_and_condition is not None:
             cmov_address, cmov_condition = cmov_addr_and_condition
-            sys.stdout.buffer.write(b"    pushfq\n")
-            sys.stdout.buffer.write(b"    push rax\n")
-            sys.stdout.buffer.write(b"    push rdx\n")
-            sys.stdout.buffer.write(b"    lea rdx, " + cmov_address + b"\n")
-            sys.stdout.buffer.write(b"    mov rax, rsp\n")
-            sys.stdout.buffer.write(b"    cmov" + cmov_condition + b" rax, rdx\n")
-            sys.stdout.buffer.write(b"    neg rax\n")
-            sys.stdout.buffer.write(b"    dec rax\n")
-            sys.stdout.buffer.write(b"    add rax, rsp\n")
-            sys.stdout.buffer.write(f"    cmp rax, {STACK_SIZE_THRESHOLD}\n".encode("ascii"))
-            sys.stdout.buffer.write(b"    jb abisan_fail_mov_below_rsp\n")
-            sys.stdout.buffer.write(b"    pop rdx\n")
-            sys.stdout.buffer.write(b"    pop rax\n")
-            sys.stdout.buffer.write(b"    popfq\n")
+            os.write(fd, b"    pushfq\n")
+            os.write(fd, b"    push rax\n")
+            os.write(fd, b"    push rdx\n")
+            os.write(fd, b"    lea rdx, " + cmov_address + b"\n")
+            os.write(fd, b"    mov rax, rsp\n")
+            os.write(fd, b"    cmov" + cmov_condition + b" rax, rdx\n")
+            os.write(fd, b"    neg rax\n")
+            os.write(fd, b"    dec rax\n")
+            os.write(fd, b"    sub rax, 0x80\n")
+            os.write(fd, b"    add rax, rsp\n")
+            os.write(fd, f"    cmp rax, {STACK_SIZE_THRESHOLD}\n".encode("ascii"))
+            os.write(fd, b"    jb abisan_fail_mov_below_rsp\n")
+            os.write(fd, b"    pop rdx\n")
+            os.write(fd, b"    pop rax\n")
+            os.write(fd, b"    popfq\n")
         elif memory_operand is not None:
-            sys.stdout.buffer.write(b"    pushfq\n")
-            sys.stdout.buffer.write(b"    push rax\n")
-            sys.stdout.buffer.write(b"    lea rax, " + memory_operand + b"\n")
-            sys.stdout.buffer.write(b"    neg rax\n")
-            sys.stdout.buffer.write(b"    dec rax\n")
-            sys.stdout.buffer.write(b"    add rax, rsp\n")
-            sys.stdout.buffer.write(f"    cmp rax, {STACK_SIZE_THRESHOLD}\n".encode("ascii"))
-            sys.stdout.buffer.write(b"    jb abisan_fail_mov_below_rsp\n")
-            sys.stdout.buffer.write(b"    pop rax\n")
-            sys.stdout.buffer.write(b"    popfq\n")
+            os.write(fd, b"    pushfq\n")
+            os.write(fd, b"    push rax\n")
+            os.write(fd, b"    lea rax, " + memory_operand + b"\n")
+            os.write(fd, b"    neg rax\n")
+            os.write(fd, b"    dec rax\n")
+            os.write(fd, b"    sub rax, 0x80\n")
+            os.write(fd, b"    add rax, rsp\n")
+            os.write(fd, f"    cmp rax, {STACK_SIZE_THRESHOLD}\n".encode("ascii"))
+            os.write(fd, b"    jb abisan_fail_mov_below_rsp\n")
+            os.write(fd, b"    pop rax\n")
+            os.write(fd, b"    popfq\n")
 
-        sys.stdout.buffer.write(line + b"\n")
+        os.write(fd, line + b"\n")
 
         if get_label_name(line) in global_symbols:
-            sys.stdout.buffer.write(b"    call abisan_function_entry\n")
+            os.write(fd, b"    call abisan_function_entry\n")
 
 
 if __name__ == "__main__":
