@@ -49,4 +49,7 @@ control:
     # Conditional mov in the red zone with a true condition
     cmova rcx, QWORD PTR [rsp - 0x80]
 
+    # Mov from above the frame
+    mov rcx, QWORD PTR [rsp + 0x8]
+
     ret

@@ -1,6 +1,4 @@
 .gdb_history
 *.o
-*_instrumented_by_abisan.s
+*.abisan.*
 *.a
-test
-abisan_test
