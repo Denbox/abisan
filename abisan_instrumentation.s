@@ -1,7 +1,8 @@
 .intel_syntax noprefix
 
-.set SHADOW_STACK_FRAME_SIZE, 80 # XXX: Make sure this stays in sync with sizeof(struct abisan_shadow_stack_frame)
-# Offsets of fields within the shadow stack frame struct
+.set SHADOW_STACK_FRAME_SIZE, 80 # TODO: Find some way to make sure this stays in sync with sizeof(struct abisan_shadow_stack_frame)
+
+# Offsets of fields within struct abisan_shadow_stack_frame
 .set FRAME_RETADDR, 0x00
 .set FRAME_RBX, 0x08
 .set FRAME_RBP, 0x10
@@ -15,7 +16,25 @@
 .set FRAME_FS, 0x4a
 .set FRAME_MXCSR, 0x4c
 
+# Offsets of fields within struct abisan_taint_state
+.set TAINT_STATE_RAX, 0
+.set TAINT_STATE_RBX, 1
+.set TAINT_STATE_RCX, 2
+.set TAINT_STATE_RDX, 3
+.set TAINT_STATE_RDI, 4
+.set TAINT_STATE_RSI, 5
+.set TAINT_STATE_RBP, 6
+.set TAINT_STATE_R8, 7
+.set TAINT_STATE_R9, 8
+.set TAINT_STATE_R10, 9
+.set TAINT_STATE_R11, 10
+.set TAINT_STATE_R12, 11
+.set TAINT_STATE_R13, 12
+.set TAINT_STATE_R14, 13
+.set TAINT_STATE_R15, 14
+
 .extern abisan_shadow_stack_pointer
+.extern abisan_taint_state
 
 .globl abisan_function_entry
 abisan_function_entry:
@@ -53,6 +72,23 @@ abisan_function_entry:
     mov rbx, QWORD PTR offset abisan_shadow_stack_pointer[rip]
     add rbx, SHADOW_STACK_FRAME_SIZE
     mov QWORD PTR offset abisan_shadow_stack_pointer[rip], rbx
+
+    lea rbx, offset abisan_taint_state[rip]
+    mov BYTE PTR [rbx + TAINT_STATE_RAX], 1
+    mov BYTE PTR [rbx + TAINT_STATE_RBX], 1
+    mov BYTE PTR [rbx + TAINT_STATE_RCX], 0
+    mov BYTE PTR [rbx + TAINT_STATE_RDX], 0
+    mov BYTE PTR [rbx + TAINT_STATE_RDI], 0
+    mov BYTE PTR [rbx + TAINT_STATE_RSI], 0
+    mov BYTE PTR [rbx + TAINT_STATE_RBP], 1
+    mov BYTE PTR [rbx + TAINT_STATE_R8], 0
+    mov BYTE PTR [rbx + TAINT_STATE_R9], 0
+    mov BYTE PTR [rbx + TAINT_STATE_R10], 1
+    mov BYTE PTR [rbx + TAINT_STATE_R11], 1
+    mov BYTE PTR [rbx + TAINT_STATE_R12], 1
+    mov BYTE PTR [rbx + TAINT_STATE_R13], 1
+    mov BYTE PTR [rbx + TAINT_STATE_R14], 1
+    mov BYTE PTR [rbx + TAINT_STATE_R15], 1
 
     # Put rbx back the way it was
     mov rbx, QWORD PTR [r11 + FRAME_RBX]
@@ -115,6 +151,18 @@ abisan_function_exit:
     # Put the original return address back in place
     mov rdi, QWORD PTR [rdi + FRAME_RETADDR]
     mov [rsp], rdi
+
+    # Taint everything that could have been clobbered
+    lea rdi, BYTE PTR offset abisan_taint_state[rip]
+    mov BYTE PTR [rdi + TAINT_STATE_RAX], 0 # TODO: This should be tainted for void functions
+    mov BYTE PTR [rdi + TAINT_STATE_RCX], 1
+    mov BYTE PTR [rdi + TAINT_STATE_RDX], 1 # TODO: This shouldn't be tainted for functions that return in rdx:rax
+    mov BYTE PTR [rdi + TAINT_STATE_RDI], 1
+    mov BYTE PTR [rdi + TAINT_STATE_RSI], 1
+    mov BYTE PTR [rdi + TAINT_STATE_R8], 1
+    mov BYTE PTR [rdi + TAINT_STATE_R9], 1
+    mov BYTE PTR [rdi + TAINT_STATE_R10], 1
+    mov BYTE PTR [rdi + TAINT_STATE_R11], 1
 
     # Clobber every register that we're allowed to,
     # except rax and rdx, because they're used for

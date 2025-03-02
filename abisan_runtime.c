@@ -23,6 +23,43 @@ struct abisan_shadow_stack_frame ABISAN_SHADOW_STACK_BASE[SHADOW_STACK_SIZE];
 struct abisan_shadow_stack_frame *abisan_shadow_stack_pointer =
     ABISAN_SHADOW_STACK_BASE;
 
+struct taint_state {
+    bool rax;
+    bool rbx;
+    bool rcx;
+    bool rdx;
+    bool rdi;
+    bool rsi;
+    bool rbp;
+    bool r8;
+    bool r9;
+    bool r10;
+    bool r11;
+    bool r12;
+    bool r13;
+    bool r14;
+    bool r15;
+    // TODO: Track all the other registers
+} __attribute__((packed));
+
+struct taint_state abisan_taint_state = {
+    .rax=0,
+    .rbx=0,
+    .rcx=0,
+    .rdx=0,
+    .rdi=0,
+    .rsi=0,
+    .rbp=0,
+    .r8=0,
+    .r9=0,
+    .r10=0,
+    .r11=0,
+    .r12=0,
+    .r13=0,
+    .r14=0,
+    .r15=0
+};
+
 [[noreturn]] void
 abisan_fail_clobber(char const *const clobbered_register,
             uint64_t const clobbered_value,
