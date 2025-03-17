@@ -63,14 +63,17 @@ struct taint_state abisan_taint_state = {
     .eflags=0
 };
 
+#define ABISAN_ERROR_START "\x1b[0;31mABISanitizer: "
+
 [[noreturn]] void
 abisan_fail_clobber(char const *const clobbered_register,
             uint64_t const clobbered_value,
             struct abisan_shadow_stack_frame const *const frame) {
     fprintf(stderr,
-            "ABISan: %s clobbered with 0x%" PRIx64
+            ABISAN_ERROR_START
+            "%s clobbered with 0x%" PRIx64
             " by the function at address %p, which was called at "
-            "address %p.\n",
+            "address %p.\x1b[0m\n",
             clobbered_register, clobbered_value, frame->instrumentation_retaddr,
             frame->retaddr);
     fprintf(stderr, "    Saved rbx: 0x%" PRIx64 "\n", frame->rbx);
@@ -148,13 +151,13 @@ abisan_fail_mxcsr(struct abisan_shadow_stack_frame const *const frame,
 
 [[noreturn]] void
 abisan_fail_mov_below_rsp(void) {
-    fprintf(stderr, "You accessed below the redzone!\n");
+    fprintf(stderr, ABISAN_ERROR_START "You accessed below the redzone!\x1b[0m\n");
     exit(EXIT_FAILURE);
 }
 
 [[noreturn]] void
 abisan_fail_taint(char const *const r) {
-    fprintf(stderr, "You accessed a tainted %s.\n", r);
+    fprintf(stderr, ABISAN_ERROR_START "You accessed a tainted %s.\x1b[0m\n", r);
     exit(EXIT_FAILURE);
 }
 
