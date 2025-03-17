@@ -23,15 +23,16 @@
 .set TAINT_STATE_RDX, 3
 .set TAINT_STATE_RDI, 4
 .set TAINT_STATE_RSI, 5
-.set TAINT_STATE_RBP, 6
-.set TAINT_STATE_R8, 7
-.set TAINT_STATE_R9, 8
-.set TAINT_STATE_R10, 9
-.set TAINT_STATE_R11, 10
-.set TAINT_STATE_R12, 11
-.set TAINT_STATE_R13, 12
-.set TAINT_STATE_R14, 13
-.set TAINT_STATE_R15, 14
+.set TAINT_STATE_R8, 6
+.set TAINT_STATE_R9, 7
+.set TAINT_STATE_R10, 8
+.set TAINT_STATE_R11, 9
+.set TAINT_STATE_R12, 10
+.set TAINT_STATE_R13, 11
+.set TAINT_STATE_R14, 12
+.set TAINT_STATE_R15, 13
+.set TAINT_STATE_RBP, 14
+.set TAINT_STATE_EFLAGS, 15
 
 .extern abisan_shadow_stack_pointer
 .extern abisan_taint_state
@@ -80,7 +81,6 @@ abisan_function_entry:
     mov BYTE PTR [rbx + TAINT_STATE_RDX], 0
     mov BYTE PTR [rbx + TAINT_STATE_RDI], 0
     mov BYTE PTR [rbx + TAINT_STATE_RSI], 0
-    mov BYTE PTR [rbx + TAINT_STATE_RBP], 1
     mov BYTE PTR [rbx + TAINT_STATE_R8], 0
     mov BYTE PTR [rbx + TAINT_STATE_R9], 0
     mov BYTE PTR [rbx + TAINT_STATE_R10], 1
@@ -89,6 +89,8 @@ abisan_function_entry:
     mov BYTE PTR [rbx + TAINT_STATE_R13], 1
     mov BYTE PTR [rbx + TAINT_STATE_R14], 1
     mov BYTE PTR [rbx + TAINT_STATE_R15], 1
+    mov BYTE PTR [rbx + TAINT_STATE_RBP], 1
+    mov BYTE PTR [rbx + TAINT_STATE_EFLAGS], 1
 
     # Put rbx back the way it was
     mov rbx, QWORD PTR [r11 + FRAME_RBX]

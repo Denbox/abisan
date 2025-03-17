@@ -20,6 +20,7 @@ struct abisan_shadow_stack_frame {
 
 #define SHADOW_STACK_SIZE (1000)
 struct abisan_shadow_stack_frame ABISAN_SHADOW_STACK_BASE[SHADOW_STACK_SIZE];
+#undef SHADOW_STACK_SIZE
 struct abisan_shadow_stack_frame *abisan_shadow_stack_pointer =
     ABISAN_SHADOW_STACK_BASE;
 
@@ -30,7 +31,6 @@ struct taint_state {
     bool rdx;
     bool rdi;
     bool rsi;
-    bool rbp;
     bool r8;
     bool r9;
     bool r10;
@@ -39,25 +39,28 @@ struct taint_state {
     bool r13;
     bool r14;
     bool r15;
+    bool rbp;
+    bool eflags;
     // TODO: Track all the other registers
 } __attribute__((packed));
 
 struct taint_state abisan_taint_state = {
-    .rax=0,
-    .rbx=0,
+    .rax=1,
+    .rbx=1,
     .rcx=0,
     .rdx=0,
     .rdi=0,
     .rsi=0,
-    .rbp=0,
     .r8=0,
     .r9=0,
-    .r10=0,
-    .r11=0,
-    .r12=0,
-    .r13=0,
-    .r14=0,
-    .r15=0
+    .r10=1,
+    .r11=1,
+    .r12=1,
+    .r13=1,
+    .r14=1,
+    .r15=1,
+    .rbp=1,
+    .eflags=0
 };
 
 [[noreturn]] void
@@ -145,6 +148,92 @@ abisan_fail_mxcsr(struct abisan_shadow_stack_frame const *const frame,
 
 [[noreturn]] void
 abisan_fail_mov_below_rsp(void) {
-    fprintf(stderr, "You accessed below rsp! (This might be fine though, if you're using the red zone)\n");
+    fprintf(stderr, "You accessed below the redzone!\n");
     exit(EXIT_FAILURE);
+}
+
+[[noreturn]] void
+abisan_fail_taint(char const *const r) {
+    fprintf(stderr, "You accessed a tainted %s.\n", r);
+    exit(EXIT_FAILURE);
+}
+
+[[noreturn]] void
+abisan_fail_taint_rax(void) {
+    abisan_fail_taint("rax");
+}
+
+[[noreturn]] void
+abisan_fail_taint_rbx(void) {
+    abisan_fail_taint("rbx");
+}
+
+[[noreturn]] void
+abisan_fail_taint_rcx(void) {
+    abisan_fail_taint("rcx");
+}
+
+[[noreturn]] void
+abisan_fail_taint_rdx(void) {
+    abisan_fail_taint("rdx");
+}
+
+[[noreturn]] void
+abisan_fail_taint_rdi(void) {
+    abisan_fail_taint("rdi");
+}
+
+[[noreturn]] void
+abisan_fail_taint_rsi(void) {
+    abisan_fail_taint("rsi");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r8(void) {
+    abisan_fail_taint("r8");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r9(void) {
+    abisan_fail_taint("r9");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r10(void) {
+    abisan_fail_taint("r10");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r11(void) {
+    abisan_fail_taint("r11");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r12(void) {
+    abisan_fail_taint("r12");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r13(void) {
+    abisan_fail_taint("r13");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r14(void) {
+    abisan_fail_taint("r14");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r15(void) {
+    abisan_fail_taint("r15");
+}
+
+[[noreturn]] void
+abisan_fail_taint_rbp(void) {
+    abisan_fail_taint("rbp");
+}
+
+[[noreturn]] void
+abisan_fail_taint_rflags(void) {
+    abisan_fail_taint("eflags");
 }

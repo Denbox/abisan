@@ -3,7 +3,7 @@ import subprocess
 import sys
 
 import capstone  # type: ignore
-from capstone import Cs, CsInsn
+from capstone import Cs, CsInsn, x86_const
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import Section, SymbolTableSection
 
@@ -79,28 +79,222 @@ def get_intermediate_labels(elf_file: ELFFile) -> dict[bytes, CsInsn]:
     }
 
 
-def get_registers_read(insn: CsInsn) -> list[int]:
-    result: list[int] = []
-    result += insn.regs_read
+def needs_taint_check(insn: CsInsn) -> bool:
+    if insn.mnemonic == "push":
+        return False
+
+    reg_ops: set[int] = get_registers_read(insn)
+    if (
+        insn.mnemonic in ("xor", "sub")
+        and len(reg_ops) == 1
+        and insn.op_count(capstone.CS_OP_REG) == 2
+    ):
+        return False
+    return True
+
+
+_UNUSED_REGISTERS: set[int] = {x86_const.X86_REG_RIP, x86_const.X86_REG_RSP}
+
+
+def get_registers_read(insn: CsInsn) -> set[int]:
+    result: set[int] = set()
+    result.update(insn.regs_read)
     for op in insn.operands:
         if op.type == capstone.CS_OP_REG and op.access & capstone.CS_AC_READ:
-            result.append(op.reg)
+            result.add(op.reg)
         elif op.type == capstone.CS_OP_MEM:
             if op.mem.base != 0:
-                result.append(op.mem.base)
+                result.add(op.mem.base)
             if op.mem.index != 0:
-                result.append(op.mem.index)
+                result.add(op.mem.index)
             if op.mem.segment != 0:
-                result.append(op.mem.segment)
-    return result
+                result.add(op.mem.segment)
+    return set(
+        filter(lambda r: r not in _UNUSED_REGISTERS, map(register_normalize, result))
+    )
 
-def get_registers_written(insn: CsInsn) -> list[int]:
-    result: list[int] = []
-    result += insn.regs_write
+
+def get_registers_written(insn: CsInsn) -> set[int]:
+    result: set[int] = set()
+    result.update(insn.regs_write)
     for op in insn.operands:
         if op.type == capstone.CS_OP_REG and op.access & capstone.CS_AC_WRITE:
-            result.append(op.reg)
-    return result
+            result.add(op.reg)
+    return set(
+        filter(lambda r: r not in _UNUSED_REGISTERS, map(register_normalize, result))
+    )
+
+
+def register_normalize(r: int) -> int:
+    match r:
+        case (
+            x86_const.X86_REG_AH
+            | x86_const.X86_REG_AL
+            | x86_const.X86_REG_AX
+            | x86_const.X86_REG_EAX
+            | x86_const.X86_REG_RAX
+        ):
+            return x86_const.X86_REG_RAX
+        case (
+            x86_const.X86_REG_BH
+            | x86_const.X86_REG_BL
+            | x86_const.X86_REG_BX
+            | x86_const.X86_REG_EBX
+            | x86_const.X86_REG_RBX
+        ):
+            return x86_const.X86_REG_RBX
+        case (
+            x86_const.X86_REG_CH
+            | x86_const.X86_REG_CL
+            | x86_const.X86_REG_CX
+            | x86_const.X86_REG_ECX
+            | x86_const.X86_REG_RCX
+        ):
+            return x86_const.X86_REG_RCX
+        case (
+            x86_const.X86_REG_DH
+            | x86_const.X86_REG_DL
+            | x86_const.X86_REG_DX
+            | x86_const.X86_REG_EDX
+            | x86_const.X86_REG_RDX
+        ):
+            return x86_const.X86_REG_RDX
+
+        case (
+            x86_const.X86_REG_DIL
+            | x86_const.X86_REG_DI
+            | x86_const.X86_REG_EDI
+            | x86_const.X86_REG_RDI
+        ):
+            return x86_const.X86_REG_RDI
+        case (
+            x86_const.X86_REG_SIL
+            | x86_const.X86_REG_SI
+            | x86_const.X86_REG_ESI
+            | x86_const.X86_REG_RSI
+        ):
+            return x86_const.X86_REG_RSI
+
+        case (
+            x86_const.X86_REG_R8B
+            | x86_const.X86_REG_R8W
+            | x86_const.X86_REG_R8D
+            | x86_const.X86_REG_R8
+        ):
+            return x86_const.X86_REG_R8
+        case (
+            x86_const.X86_REG_R9B
+            | x86_const.X86_REG_R9W
+            | x86_const.X86_REG_R9D
+            | x86_const.X86_REG_R9
+        ):
+            return x86_const.X86_REG_R9
+        case (
+            x86_const.X86_REG_R10B
+            | x86_const.X86_REG_R10W
+            | x86_const.X86_REG_R10D
+            | x86_const.X86_REG_R10
+        ):
+            return x86_const.X86_REG_R10
+        case (
+            x86_const.X86_REG_R11B
+            | x86_const.X86_REG_R11W
+            | x86_const.X86_REG_R11D
+            | x86_const.X86_REG_R11
+        ):
+            return x86_const.X86_REG_R11
+        case (
+            x86_const.X86_REG_R12B
+            | x86_const.X86_REG_R12W
+            | x86_const.X86_REG_R12D
+            | x86_const.X86_REG_R12
+        ):
+            return x86_const.X86_REG_R12
+        case (
+            x86_const.X86_REG_R13B
+            | x86_const.X86_REG_R13W
+            | x86_const.X86_REG_R13D
+            | x86_const.X86_REG_R13
+        ):
+            return x86_const.X86_REG_R13
+        case (
+            x86_const.X86_REG_R14B
+            | x86_const.X86_REG_R14W
+            | x86_const.X86_REG_R14D
+            | x86_const.X86_REG_R14
+        ):
+            return x86_const.X86_REG_R14
+        case (
+            x86_const.X86_REG_R15B
+            | x86_const.X86_REG_R15W
+            | x86_const.X86_REG_R15D
+            | x86_const.X86_REG_R15
+        ):
+            return x86_const.X86_REG_R15
+
+        case (
+            x86_const.X86_REG_BPL
+            | x86_const.X86_REG_BP
+            | x86_const.X86_REG_EBP
+            | x86_const.X86_REG_RBP
+        ):
+            return x86_const.X86_REG_RBP
+        case (
+            x86_const.X86_REG_SPL
+            | x86_const.X86_REG_SP
+            | x86_const.X86_REG_ESP
+            | x86_const.X86_REG_RSP
+        ):
+            return x86_const.X86_REG_RSP
+
+        case x86_const.X86_REG_IP | x86_const.X86_REG_EIP | x86_const.X86_REG_RIP:
+            return x86_const.X86_REG_RIP
+
+        case x86_const.X86_REG_EFLAGS:
+            return x86_const.X86_REG_EFLAGS
+
+    print("Unsupported register {cs.reg_name(r)}", file=sys.stderr)
+    sys.exit(1)
+
+
+def cs_to_taint_idx(r: int) -> int:
+    match r:
+        case x86_const.X86_REG_RAX:
+            return 0
+        case x86_const.X86_REG_RBX:
+            return 1
+        case x86_const.X86_REG_RDX:
+            return 2
+        case x86_const.X86_REG_RCX:
+            return 3
+        case x86_const.X86_REG_RDI:
+            return 4
+        case x86_const.X86_REG_RSI:
+            return 5
+        case x86_const.X86_REG_R8:
+            return 6
+        case x86_const.X86_REG_R9:
+            return 7
+        case x86_const.X86_REG_R10:
+            return 8
+        case x86_const.X86_REG_R11:
+            return 9
+        case x86_const.X86_REG_R12:
+            return 10
+        case x86_const.X86_REG_R13:
+            return 11
+        case x86_const.X86_REG_R14:
+            return 12
+        case x86_const.X86_REG_R15:
+            return 13
+        case x86_const.X86_REG_RBP:
+            return 14
+        case x86_const.X86_REG_EFLAGS:
+            return 15
+
+    print("Unsupported register {cs.reg_name(r)}", file=sys.stderr)
+    sys.exit(1)
+
 
 def main() -> None:
     if len(sys.argv) != 2:
@@ -126,7 +320,9 @@ def main() -> None:
     instruction_line_numbers: dict[bytes, int] = {}
     for i, line in enumerate(map(bytes.rstrip, map(remove_comment, lines))):
         if is_instruction(line):
-            label_name: bytes = f"{intermediate_file_name.replace('/', '_slash_')}_{i}".encode("ascii")
+            label_name: bytes = (
+                f"{intermediate_file_name.replace('/', '_slash_')}_{i}".encode("ascii")
+            )
             os.write(intermediate_fd, label_name + b":\n")
             instruction_line_numbers[label_name] = i
         os.write(intermediate_fd, line + b"\n")
@@ -153,8 +349,10 @@ def main() -> None:
     ]
 
     for i, line in enumerate(map(bytes.rstrip, map(remove_comment, lines))):
-        if i in assembled_instructions:
-            insn: CsInsn = assembled_instructions[i]
+        insn: CsInsn = assembled_instructions.get(i)
+        if insn is not None:
+            registers_read: set[int] = get_registers_read(insn)
+            registers_written: set[int] = get_registers_written(insn)
             if insn.op_count(capstone.CS_OP_MEM) > 0 and insn.mnemonic != "lea":
                 memory_operand: bytes | None = get_memory_operand(line)
                 assert memory_operand is not None
@@ -164,7 +362,9 @@ def main() -> None:
                     os.write(output_fd, b"    push rdx\n")
                     os.write(output_fd, b"    lea rdx, " + memory_operand + b"\n")
                     os.write(output_fd, b"    mov rax, rsp\n")
-                    os.write(output_fd, b"    " + insn.mnemonic.encode("ascii") + b" rax, rdx\n")
+                    os.write(
+                        output_fd, b"    " + insn.mnemonic.encode("ascii") + b" rax, rdx\n"
+                    )
                     os.write(output_fd, b"    add rax, 0x80\n")
                     os.write(output_fd, b"    cmp rax, rsp\n")
                     os.write(output_fd, b"    jb abisan_fail_mov_below_rsp\n")
@@ -180,6 +380,38 @@ def main() -> None:
                     os.write(output_fd, b"    jb abisan_fail_mov_below_rsp\n")
                     os.write(output_fd, b"    pop rax\n")
                     os.write(output_fd, b"    popfq\n")
+
+            if needs_taint_check(insn):
+                for r in get_registers_read(insn):
+                    os.write(output_fd, b"    pushfq\n")
+                    os.write(output_fd, b"    push rax\n")
+                    os.write(
+                        output_fd,
+                        f"    lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(r)}]\n".encode(
+                            "ascii"
+                        ),
+                    )
+                    os.write(output_fd, b"    mov al, byte ptr [rax]\n")
+                    os.write(output_fd, b"    cmp al, 0\n")
+                    os.write(
+                        output_fd, f"    jne abisan_fail_taint_{cs.reg_name(r)}\n".encode()
+                    )
+                    os.write(output_fd, b"    pop rax\n")
+                    os.write(output_fd, b"    popfq\n")
+
+            for r in get_registers_written(insn):
+                os.write(output_fd, b"    pushfq\n")
+                os.write(output_fd, b"    push rax\n")
+                os.write(
+                    output_fd,
+                    f"    lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(r)}]\n".encode(
+                        "ascii"
+                    ),
+                )
+                os.write(output_fd, b"    mov byte ptr [rax], 0\n")
+                os.write(output_fd, b"    pop rax\n")
+                os.write(output_fd, b"    popfq\n")
+
         os.write(output_fd, line + b"\n")
 
         if get_label_name(line) in global_symbols:

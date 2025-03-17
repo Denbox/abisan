@@ -2,5 +2,5 @@
 
 .globl clobber_rbp
 clobber_rbp:
-    inc rbp
+    mov rbp, 0x10
     ret
