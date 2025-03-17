@@ -79,8 +79,28 @@ def get_intermediate_labels(elf_file: ELFFile) -> dict[bytes, CsInsn]:
     }
 
 
-STACK_SIZE_THRESHOLD: int = 0x21000
+def get_registers_read(insn: CsInsn) -> list[int]:
+    result: list[int] = []
+    result += insn.regs_read
+    for op in insn.operands:
+        if op.type == capstone.CS_OP_REG and op.access & capstone.CS_AC_READ:
+            result.append(op.reg)
+        elif op.type == capstone.CS_OP_MEM:
+            if op.mem.base != 0:
+                result.append(op.mem.base)
+            if op.mem.index != 0:
+                result.append(op.mem.index)
+            if op.mem.segment != 0:
+                result.append(op.mem.segment)
+    return result
 
+def get_registers_written(insn: CsInsn) -> list[int]:
+    result: list[int] = []
+    result += insn.regs_write
+    for op in insn.operands:
+        if op.type == capstone.CS_OP_REG and op.access & capstone.CS_AC_WRITE:
+            result.append(op.reg)
+    return result
 
 def main() -> None:
     if len(sys.argv) != 2:
@@ -102,15 +122,11 @@ def main() -> None:
 
     lines: list[bytes] = source_code.splitlines(keepends=True)
 
-    global_symbols: list[bytes] = [
-        symbol for symbol in map(get_global_name, lines) if symbol is not None
-    ]
-
     # Add a global label before every instruction
     instruction_line_numbers: dict[bytes, int] = {}
     for i, line in enumerate(map(bytes.rstrip, map(remove_comment, lines))):
         if is_instruction(line):
-            label_name: bytes = f"{intermediate_file_name}_{i}".encode("ascii")
+            label_name: bytes = f"{intermediate_file_name.replace('/', '_slash_')}_{i}".encode("ascii")
             os.write(intermediate_fd, label_name + b":\n")
             instruction_line_numbers[label_name] = i
         os.write(intermediate_fd, line + b"\n")
@@ -132,6 +148,10 @@ def main() -> None:
     output_file_name: str = input_file_name + ".abisan." + input_file_name_suffix
     output_fd: int = os.open(output_file_name, os.O_CREAT | os.O_WRONLY, mode=0o644)
 
+    global_symbols: list[bytes] = [
+        symbol for symbol in map(get_global_name, lines) if symbol is not None
+    ]
+
     for i, line in enumerate(map(bytes.rstrip, map(remove_comment, lines))):
         if i in assembled_instructions:
             insn: CsInsn = assembled_instructions[i]
@@ -144,16 +164,9 @@ def main() -> None:
                     os.write(output_fd, b"    push rdx\n")
                     os.write(output_fd, b"    lea rdx, " + memory_operand + b"\n")
                     os.write(output_fd, b"    mov rax, rsp\n")
-                    os.write(
-                        output_fd, b"    " + insn.mnemonic.encode("ascii") + b" rax, rdx\n"
-                    )
-                    os.write(output_fd, b"    neg rax\n")
-                    os.write(output_fd, b"    dec rax\n")
-                    os.write(output_fd, b"    sub rax, 0x80\n")
-                    os.write(output_fd, b"    add rax, rsp\n")
-                    os.write(
-                        output_fd, f"    cmp rax, {STACK_SIZE_THRESHOLD}\n".encode("ascii")
-                    )
+                    os.write(output_fd, b"    " + insn.mnemonic.encode("ascii") + b" rax, rdx\n")
+                    os.write(output_fd, b"    add rax, 0x80\n")
+                    os.write(output_fd, b"    cmp rax, rsp\n")
                     os.write(output_fd, b"    jb abisan_fail_mov_below_rsp\n")
                     os.write(output_fd, b"    pop rdx\n")
                     os.write(output_fd, b"    pop rax\n")
@@ -162,13 +175,8 @@ def main() -> None:
                     os.write(output_fd, b"    pushfq\n")
                     os.write(output_fd, b"    push rax\n")
                     os.write(output_fd, b"    lea rax, " + memory_operand + b"\n")
-                    os.write(output_fd, b"    neg rax\n")
-                    os.write(output_fd, b"    dec rax\n")
-                    os.write(output_fd, b"    sub rax, 0x80\n")
-                    os.write(output_fd, b"    add rax, rsp\n")
-                    os.write(
-                        output_fd, f"    cmp rax, {STACK_SIZE_THRESHOLD}\n".encode("ascii")
-                    )
+                    os.write(output_fd, b"    add rax, 0x80\n")
+                    os.write(output_fd, b"    cmp rax, rsp\n")
                     os.write(output_fd, b"    jb abisan_fail_mov_below_rsp\n")
                     os.write(output_fd, b"    pop rax\n")
                     os.write(output_fd, b"    popfq\n")
