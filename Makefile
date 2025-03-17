@@ -9,7 +9,8 @@ fmt:
 	clang-format --style='{IndentWidth: 4, AllowShortFunctionsOnASingleLine: false}' -i *.c
 
 clean:
-	rm -f *.a *.o
+	rm -f *.a *.o && sh -c 'for thing in tests/*; do pushd "$$thing" && make clean && popd; done'
+
 
 test: libabisan_runtime.a
 	./run_tests.bash
