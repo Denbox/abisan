@@ -400,7 +400,6 @@ def main() -> None:
                     os.write(output_fd, b"    popfq\n")
 
             for r in get_registers_written(insn):
-                os.write(output_fd, b"    pushfq\n")
                 os.write(output_fd, b"    push rax\n")
                 os.write(
                     output_fd,
@@ -410,7 +409,6 @@ def main() -> None:
                 )
                 os.write(output_fd, b"    mov byte ptr [rax], 0\n")
                 os.write(output_fd, b"    pop rax\n")
-                os.write(output_fd, b"    popfq\n")
 
         os.write(output_fd, line + b"\n")
 
