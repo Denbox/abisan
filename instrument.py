@@ -377,10 +377,8 @@ def main() -> None:
 
     input_file_name: str = sys.argv[1]
     _, input_file_name_suffix = input_file_name.rsplit(".", maxsplit=1)
-    intermediate_file_name: str = (
-        input_file_name + ".abisan.intermediate." + input_file_name_suffix
-    )
-    intermediate_object_file_name: str = intermediate_file_name + ".o"
+    intermediate_file_name: str = f"{input_file_name}.abisan.intermediate.{input_file_name_suffix}"
+    intermediate_object_file_name: str = f"{intermediate_file_name}.o"
 
     with open(sys.argv[1], "rb") as f:
         source_code: bytes = f.read()
@@ -392,9 +390,7 @@ def main() -> None:
         instruction_line_numbers: dict[bytes, int] = {}
         for i, line in enumerate(map(bytes.rstrip, map(remove_comment, lines))):
             if is_instruction(line):
-                label_name: bytes = (
-                    f"abisan_intermediate_{i}".encode("ascii")
-                )
+                label_name: bytes = f"abisan_intermediate_{i}".encode("ascii")
                 f.write(label_name + b":\n")
                 instruction_line_numbers[label_name] = i
             f.write(line + b"\n")
