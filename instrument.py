@@ -354,6 +354,22 @@ def generate_reg_taint_check(r: int) -> bytes:
     )
 
 
+def generate_reg_taint_update(r: int) -> bytes:
+    return (
+        b"\n".join(
+            (
+                b"    push rax",
+                f"    lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(r)}]".encode(
+                    "ascii"
+                ),
+                b"    mov byte ptr [rax], 0",
+                b"    pop rax",
+            )
+        )
+        + b"\n"
+    )
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         print(f"Usage: python3 {sys.argv[0]} <assembly_file>", file=sys.stderr)
@@ -422,14 +438,7 @@ def main() -> None:
                         f.write(generate_reg_taint_check(r))
 
                 for r in get_registers_written(insn):
-                    f.write(b"    push rax\n")
-                    f.write(
-                        f"    lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(r)}]\n".encode(
-                            "ascii"
-                        ),
-                    )
-                    f.write(b"    mov byte ptr [rax], 0\n")
-                    f.write(b"    pop rax\n")
+                    f.write(generate_reg_taint_update(r))
 
             f.write(line + b"\n")
 
