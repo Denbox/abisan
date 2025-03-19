@@ -11,19 +11,17 @@ cs: Cs = Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
 cs.detail = True
 
 
-def get_memory_operand(line: bytes) -> bytes | None:
+def get_memory_operand(line: bytes) -> bytes:
     tokens: list[bytes] = line.split(maxsplit=1)
-    if len(tokens) != 2:
-        return None
+    assert len(tokens) == 2
 
     mnemonic: bytes = tokens[0].lower()
-    if mnemonic == b"lea":
-        return None
+    assert mnemonic != b"lea"
 
     for operand in (token.strip() for token in tokens[1].split(b",")):
         if b"[" in operand:
             return operand
-    return None
+    assert False
 
 
 def get_global_name(line: bytes) -> bytes | None:
@@ -296,6 +294,28 @@ def cs_to_taint_idx(r: int) -> int:
     sys.exit(1)
 
 
+def generate_cmov_instrumentation(line: bytes, insn: CsInsn) -> bytes:
+    return (
+        b"\n".join(
+            (
+                b"    pushfq",
+                b"    push rax",
+                b"    push rdx",
+                b"    lea rdx, " + get_memory_operand(line),
+                b"    mov rax, rsp",
+                b"    " + insn.mnemonic.encode("ascii") + b" rax, rdx",
+                b"    add rax, 0x80",
+                b"    cmp rax, rsp",
+                b"    jb abisan_fail_mov_below_rsp",
+                b"    pop rdx",
+                b"    pop rax",
+                b"    popfq",
+            )
+        )
+        + b"\n"
+    )
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         print(f"Usage: python3 {sys.argv[0]} <assembly_file>", file=sys.stderr)
@@ -355,20 +375,7 @@ def main() -> None:
                     memory_operand: bytes | None = get_memory_operand(line)
                     assert memory_operand is not None
                     if insn.mnemonic.startswith("cmov"):
-                        f.write(b"    pushfq\n")
-                        f.write(b"    push rax\n")
-                        f.write(b"    push rdx\n")
-                        f.write(b"    lea rdx, " + memory_operand + b"\n")
-                        f.write(b"    mov rax, rsp\n")
-                        f.write(
-                            b"    " + insn.mnemonic.encode("ascii") + b" rax, rdx\n"
-                        )
-                        f.write(b"    add rax, 0x80\n")
-                        f.write(b"    cmp rax, rsp\n")
-                        f.write(b"    jb abisan_fail_mov_below_rsp\n")
-                        f.write(b"    pop rdx\n")
-                        f.write(b"    pop rax\n")
-                        f.write(b"    popfq\n")
+                        f.write(generate_cmov_instrumentation(line, insn))
                     else:
                         f.write(b"    pushfq\n")
                         f.write(b"    push rax\n")
@@ -390,9 +397,7 @@ def main() -> None:
                         )
                         f.write(b"    mov al, byte ptr [rax]\n")
                         f.write(b"    cmp al, 0\n")
-                        f.write(
-                            f"    jne abisan_fail_taint_{cs.reg_name(r)}\n".encode()
-                        )
+                        f.write(f"    jne abisan_fail_taint_{cs.reg_name(r)}\n".encode())
                         f.write(b"    pop rax\n")
                         f.write(b"    popfq\n")
 
