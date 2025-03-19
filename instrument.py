@@ -79,7 +79,7 @@ def get_intermediate_labels(elf_file: ELFFile) -> dict[bytes, CsInsn]:
     }
 
 
-def needs_taint_check(insn: CsInsn) -> bool:
+def needs_taint_check_for_read(insn: CsInsn) -> bool:
     if insn.mnemonic == "push":
         return False
 
@@ -381,7 +381,7 @@ def main() -> None:
                     os.write(output_fd, b"    pop rax\n")
                     os.write(output_fd, b"    popfq\n")
 
-            if needs_taint_check(insn):
+            if needs_taint_check_for_read(insn):
                 for r in get_registers_read(insn):
                     os.write(output_fd, b"    pushfq\n")
                     os.write(output_fd, b"    push rax\n")
