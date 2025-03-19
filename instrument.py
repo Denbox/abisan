@@ -342,78 +342,76 @@ def main() -> None:
     }
 
     output_file_name: str = input_file_name + ".abisan." + input_file_name_suffix
-    output_fd: int = os.open(output_file_name, os.O_CREAT | os.O_WRONLY, mode=0o644)
 
     global_symbols: list[bytes] = [
         symbol for symbol in map(get_global_name, lines) if symbol is not None
     ]
 
-    for i, line in enumerate(map(bytes.rstrip, map(remove_comment, lines))):
-        insn: CsInsn = assembled_instructions.get(i)
-        if insn is not None:
-            registers_read: set[int] = get_registers_read(insn)
-            registers_written: set[int] = get_registers_written(insn)
-            if insn.op_count(capstone.CS_OP_MEM) > 0 and insn.mnemonic != "lea":
-                memory_operand: bytes | None = get_memory_operand(line)
-                assert memory_operand is not None
-                if insn.mnemonic.startswith("cmov"):
-                    os.write(output_fd, b"    pushfq\n")
-                    os.write(output_fd, b"    push rax\n")
-                    os.write(output_fd, b"    push rdx\n")
-                    os.write(output_fd, b"    lea rdx, " + memory_operand + b"\n")
-                    os.write(output_fd, b"    mov rax, rsp\n")
-                    os.write(
-                        output_fd, b"    " + insn.mnemonic.encode("ascii") + b" rax, rdx\n"
-                    )
-                    os.write(output_fd, b"    add rax, 0x80\n")
-                    os.write(output_fd, b"    cmp rax, rsp\n")
-                    os.write(output_fd, b"    jb abisan_fail_mov_below_rsp\n")
-                    os.write(output_fd, b"    pop rdx\n")
-                    os.write(output_fd, b"    pop rax\n")
-                    os.write(output_fd, b"    popfq\n")
-                else:
-                    os.write(output_fd, b"    pushfq\n")
-                    os.write(output_fd, b"    push rax\n")
-                    os.write(output_fd, b"    lea rax, " + memory_operand + b"\n")
-                    os.write(output_fd, b"    add rax, 0x80\n")
-                    os.write(output_fd, b"    cmp rax, rsp\n")
-                    os.write(output_fd, b"    jb abisan_fail_mov_below_rsp\n")
-                    os.write(output_fd, b"    pop rax\n")
-                    os.write(output_fd, b"    popfq\n")
+    with open(output_file_name, "xb") as f:
+        for i, line in enumerate(map(bytes.rstrip, map(remove_comment, lines))):
+            insn: CsInsn = assembled_instructions.get(i)
+            if insn is not None:
+                registers_read: set[int] = get_registers_read(insn)
+                registers_written: set[int] = get_registers_written(insn)
+                if insn.op_count(capstone.CS_OP_MEM) > 0 and insn.mnemonic != "lea":
+                    memory_operand: bytes | None = get_memory_operand(line)
+                    assert memory_operand is not None
+                    if insn.mnemonic.startswith("cmov"):
+                        f.write(b"    pushfq\n")
+                        f.write(b"    push rax\n")
+                        f.write(b"    push rdx\n")
+                        f.write(b"    lea rdx, " + memory_operand + b"\n")
+                        f.write(b"    mov rax, rsp\n")
+                        f.write(
+                            b"    " + insn.mnemonic.encode("ascii") + b" rax, rdx\n"
+                        )
+                        f.write(b"    add rax, 0x80\n")
+                        f.write(b"    cmp rax, rsp\n")
+                        f.write(b"    jb abisan_fail_mov_below_rsp\n")
+                        f.write(b"    pop rdx\n")
+                        f.write(b"    pop rax\n")
+                        f.write(b"    popfq\n")
+                    else:
+                        f.write(b"    pushfq\n")
+                        f.write(b"    push rax\n")
+                        f.write(b"    lea rax, " + memory_operand + b"\n")
+                        f.write(b"    add rax, 0x80\n")
+                        f.write(b"    cmp rax, rsp\n")
+                        f.write(b"    jb abisan_fail_mov_below_rsp\n")
+                        f.write(b"    pop rax\n")
+                        f.write(b"    popfq\n")
 
-            if needs_taint_check_for_read(insn):
-                for r in get_registers_read(insn):
-                    os.write(output_fd, b"    pushfq\n")
-                    os.write(output_fd, b"    push rax\n")
-                    os.write(
-                        output_fd,
+                if needs_taint_check_for_read(insn):
+                    for r in get_registers_read(insn):
+                        f.write(b"    pushfq\n")
+                        f.write(b"    push rax\n")
+                        f.write(
+                            f"    lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(r)}]\n".encode(
+                                "ascii"
+                            ),
+                        )
+                        f.write(b"    mov al, byte ptr [rax]\n")
+                        f.write(b"    cmp al, 0\n")
+                        f.write(
+                            f"    jne abisan_fail_taint_{cs.reg_name(r)}\n".encode()
+                        )
+                        f.write(b"    pop rax\n")
+                        f.write(b"    popfq\n")
+
+                for r in get_registers_written(insn):
+                    f.write(b"    push rax\n")
+                    f.write(
                         f"    lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(r)}]\n".encode(
                             "ascii"
                         ),
                     )
-                    os.write(output_fd, b"    mov al, byte ptr [rax]\n")
-                    os.write(output_fd, b"    cmp al, 0\n")
-                    os.write(
-                        output_fd, f"    jne abisan_fail_taint_{cs.reg_name(r)}\n".encode()
-                    )
-                    os.write(output_fd, b"    pop rax\n")
-                    os.write(output_fd, b"    popfq\n")
+                    f.write(b"    mov byte ptr [rax], 0\n")
+                    f.write(b"    pop rax\n")
 
-            for r in get_registers_written(insn):
-                os.write(output_fd, b"    push rax\n")
-                os.write(
-                    output_fd,
-                    f"    lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(r)}]\n".encode(
-                        "ascii"
-                    ),
-                )
-                os.write(output_fd, b"    mov byte ptr [rax], 0\n")
-                os.write(output_fd, b"    pop rax\n")
+            f.write(line + b"\n")
 
-        os.write(output_fd, line + b"\n")
-
-        if get_label_name(line) in global_symbols:
-            os.write(output_fd, b"    call abisan_function_entry\n")
+            if get_label_name(line) in global_symbols:
+                f.write(b"    call abisan_function_entry\n")
 
 
 if __name__ == "__main__":
