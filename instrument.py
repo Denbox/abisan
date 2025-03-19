@@ -68,7 +68,7 @@ def get_intermediate_labels(elf_file: ELFFile) -> dict[bytes, CsInsn]:
             result += [
                 (symbol.name, symbol.entry["st_value"])
                 for symbol in section.iter_symbols()
-                if ".abisan.intermediate." in symbol.name
+                if symbol.name.startswith("abisan_intermediate")
             ]
     the_code: bytes = elf_file.get_section_by_name(".text").data()
     return {
@@ -393,7 +393,7 @@ def main() -> None:
         for i, line in enumerate(map(bytes.rstrip, map(remove_comment, lines))):
             if is_instruction(line):
                 label_name: bytes = (
-                    f"{intermediate_file_name.replace('/', '_slash_')}_{i}".encode("ascii")
+                    f"abisan_intermediate_{i}".encode("ascii")
                 )
                 f.write(label_name + b":\n")
                 instruction_line_numbers[label_name] = i
@@ -426,8 +426,6 @@ def main() -> None:
                 registers_read: set[int] = get_registers_read(insn)
                 registers_written: set[int] = get_registers_written(insn)
                 if insn.op_count(capstone.CS_OP_MEM) > 0 and insn.mnemonic != "lea":
-                    memory_operand: bytes | None = get_memory_operand(line)
-                    assert memory_operand is not None
                     if insn.mnemonic.startswith("cmov"):
                         f.write(generate_cmov_instrumentation(line, insn))
                     else:
