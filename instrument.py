@@ -316,6 +316,24 @@ def generate_cmov_instrumentation(line: bytes, insn: CsInsn) -> bytes:
     )
 
 
+def generate_generic_memory_instrumentation(line: bytes) -> bytes:
+    return (
+        b"\n".join(
+            (
+                b"    pushfq",
+                b"    push rax",
+                b"    lea rax, " + get_memory_operand(line),
+                b"    add rax, 0x80",
+                b"    cmp rax, rsp",
+                b"    jb abisan_fail_mov_below_rsp",
+                b"    pop rax",
+                b"    popfq",
+            )
+        )
+        + b"\n"
+    )
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         print(f"Usage: python3 {sys.argv[0]} <assembly_file>", file=sys.stderr)
@@ -377,14 +395,7 @@ def main() -> None:
                     if insn.mnemonic.startswith("cmov"):
                         f.write(generate_cmov_instrumentation(line, insn))
                     else:
-                        f.write(b"    pushfq\n")
-                        f.write(b"    push rax\n")
-                        f.write(b"    lea rax, " + memory_operand + b"\n")
-                        f.write(b"    add rax, 0x80\n")
-                        f.write(b"    cmp rax, rsp\n")
-                        f.write(b"    jb abisan_fail_mov_below_rsp\n")
-                        f.write(b"    pop rax\n")
-                        f.write(b"    popfq\n")
+                        f.write(generate_generic_memory_instrumentation(line))
 
                 if needs_taint_check_for_read(insn):
                     for r in get_registers_read(insn):
