@@ -409,7 +409,7 @@ def main() -> None:
         i: intermediate_labels[label] for label, i in instruction_line_numbers.items()
     }
 
-    output_file_name: str = input_file_name + ".abisan." + input_file_name_suffix
+    output_file_name: str = f"{input_file_name}.abisan.{input_file_name_suffix}"
 
     global_symbols: list[bytes] = [
         symbol for symbol in map(get_global_name, lines) if symbol is not None
