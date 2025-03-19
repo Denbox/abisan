@@ -334,6 +334,26 @@ def generate_generic_memory_instrumentation(line: bytes) -> bytes:
     )
 
 
+def generate_reg_taint_check(r: int) -> bytes:
+    return (
+        b"\n".join(
+            (
+                b"    pushfq",
+                b"    push rax",
+                f"    lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(r)}]".encode(
+                    "ascii"
+                ),
+                b"    mov al, byte ptr [rax]",
+                b"    cmp al, 0",
+                f"    jne abisan_fail_taint_{cs.reg_name(r)}".encode(),
+                b"    pop rax",
+                b"    popfq",
+            )
+        )
+        + b"\n"
+    )
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         print(f"Usage: python3 {sys.argv[0]} <assembly_file>", file=sys.stderr)
@@ -399,18 +419,7 @@ def main() -> None:
 
                 if needs_taint_check_for_read(insn):
                     for r in get_registers_read(insn):
-                        f.write(b"    pushfq\n")
-                        f.write(b"    push rax\n")
-                        f.write(
-                            f"    lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(r)}]\n".encode(
-                                "ascii"
-                            ),
-                        )
-                        f.write(b"    mov al, byte ptr [rax]\n")
-                        f.write(b"    cmp al, 0\n")
-                        f.write(f"    jne abisan_fail_taint_{cs.reg_name(r)}\n".encode())
-                        f.write(b"    pop rax\n")
-                        f.write(b"    popfq\n")
+                        f.write(generate_reg_taint_check(r))
 
                 for r in get_registers_written(insn):
                     f.write(b"    push rax\n")
