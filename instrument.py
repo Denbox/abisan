@@ -306,9 +306,6 @@ def main() -> None:
     intermediate_file_name: str = (
         input_file_name + ".abisan.intermediate." + input_file_name_suffix
     )
-    intermediate_fd: int = os.open(
-        intermediate_file_name, os.O_CREAT | os.O_WRONLY, mode=0o644
-    )
     intermediate_object_file_name: str = intermediate_file_name + ".o"
 
     with open(sys.argv[1], "rb") as f:
@@ -317,15 +314,16 @@ def main() -> None:
     lines: list[bytes] = source_code.splitlines(keepends=True)
 
     # Add a global label before every instruction
-    instruction_line_numbers: dict[bytes, int] = {}
-    for i, line in enumerate(map(bytes.rstrip, map(remove_comment, lines))):
-        if is_instruction(line):
-            label_name: bytes = (
-                f"{intermediate_file_name.replace('/', '_slash_')}_{i}".encode("ascii")
-            )
-            os.write(intermediate_fd, label_name + b":\n")
-            instruction_line_numbers[label_name] = i
-        os.write(intermediate_fd, line + b"\n")
+    with open(intermediate_file_name, "xb") as f:
+        instruction_line_numbers: dict[bytes, int] = {}
+        for i, line in enumerate(map(bytes.rstrip, map(remove_comment, lines))):
+            if is_instruction(line):
+                label_name: bytes = (
+                    f"{intermediate_file_name.replace('/', '_slash_')}_{i}".encode("ascii")
+                )
+                f.write(label_name + b":\n")
+                instruction_line_numbers[label_name] = i
+            f.write(line + b"\n")
 
     # Assemble the result
     subprocess.run(
