@@ -52,4 +52,11 @@ control:
     # Mov from above the frame
     mov rcx, QWORD PTR [rsp + 0x8]
 
+    # Mov into the heap
+    mov rdi, 1
+    call malloc
+    mov byte ptr [rax], 0
+    mov rdi, rax
+    call free
+
     ret
