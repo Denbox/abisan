@@ -12,6 +12,27 @@ control:
     add rax, r9
     add rax, QWORD PTR [rsp + 0x08]
 
+    # mov into the heap
+    push rax
+    mov rdi, 1
+    call malloc
+    mov byte ptr [rax], 0
+    mov rdi, rax
+    call free
+    pop rax
+
+    # cmov from the heap
+    push rax
+    mov rdi, 4
+    call malloc
+    mov dword ptr [rax], 0xdeadbeef
+    mov rdi, 1
+    cmp rdi, 0
+    cmova edi, dword ptr [rax]
+    mov rdi, rax
+    call free
+    pop rax
+
     # Zero all volatile registers
     xor rdi, rdi
     xor rsi, rsi
@@ -51,12 +72,5 @@ control:
 
     # Mov from above the frame
     mov rcx, QWORD PTR [rsp + 0x8]
-
-    # Mov into the heap
-    mov rdi, 1
-    call malloc
-    mov byte ptr [rax], 0
-    mov rdi, rax
-    call free
 
     ret
