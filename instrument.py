@@ -78,6 +78,7 @@ def get_intermediate_labels(elf_file: ELFFile) -> dict[bytes, CsInsn]:
 
 
 def needs_taint_check_for_read(insn: CsInsn) -> bool:
+    # TODO: Don't check mov into stack
     if insn.mnemonic == "push":
         return False
 
@@ -295,6 +296,7 @@ def cs_to_taint_idx(r: int) -> int:
 
 
 def generate_cmov_instrumentation(line: bytes, insn: CsInsn) -> bytes:
+    # TODO: Don't fail on heap access
     return (
         b"\n".join(
             (
@@ -317,6 +319,7 @@ def generate_cmov_instrumentation(line: bytes, insn: CsInsn) -> bytes:
 
 
 def generate_generic_memory_instrumentation(line: bytes) -> bytes:
+    # TODO: Don't fail on heap access
     return (
         b"\n".join(
             (
@@ -335,6 +338,7 @@ def generate_generic_memory_instrumentation(line: bytes) -> bytes:
 
 
 def generate_reg_taint_check(r: int) -> bytes:
+    # TODO: Make this correct for cmov
     return (
         b"\n".join(
             (
@@ -355,6 +359,7 @@ def generate_reg_taint_check(r: int) -> bytes:
 
 
 def generate_reg_taint_update(r: int) -> bytes:
+    # TODO: Make this correct for cmov
     return (
         b"\n".join(
             (
