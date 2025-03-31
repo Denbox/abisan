@@ -119,6 +119,10 @@ def get_registers_written(insn: CsInsn) -> set[int]:
     for op in insn.operands:
         if op.type == capstone.CS_OP_REG and op.access & capstone.CS_AC_WRITE:
             result.add(op.reg)
+
+    if insn.mnemonic == "call":
+        result.add(x86_const.X86_REG_RAX)
+
     return set(
         filter(lambda r: r not in _UNUSED_REGISTERS, map(register_normalize, result))
     )
@@ -320,15 +324,25 @@ def generate_cmov_instrumentation(line: bytes, insn: CsInsn) -> bytes:
 
 def generate_generic_memory_instrumentation(line: bytes) -> bytes:
     # TODO: Don't fail on heap access
+    # TODO: Make size of red zone a tunable
+    # TODO: Make size of stack a tunable
     return (
         b"\n".join(
             (
                 b"    pushfq",
                 b"    push rax",
+                b"    push rbx",
                 b"    lea rax, " + get_memory_operand(line),
                 b"    add rax, 0x80",
                 b"    cmp rax, rsp",
-                b"    jb abisan_fail_mov_below_rsp",
+                b"    setb bl",
+                b"    add rax, 0x7fff80",
+                b"    cmp rax, rsp",
+                b"    seta bh",
+                b"    add bl, bh",
+                b"    cmp bl, 2",
+                b"    je abisan_fail_mov_below_rsp",
+                b"    pop rbx",
                 b"    pop rax",
                 b"    popfq",
             )
