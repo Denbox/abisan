@@ -300,20 +300,25 @@ def cs_to_taint_idx(r: int) -> int:
 
 
 def generate_cmov_instrumentation(line: bytes, insn: CsInsn) -> bytes:
-    # TODO: Don't fail on heap access
     return (
         b"\n".join(
             (
                 b"    pushfq",
                 b"    push rax",
-                b"    push rdx",
-                b"    lea rdx, " + get_memory_operand(line),
+                b"    push rbx",
+                b"    lea rbx, " + get_memory_operand(line),
                 b"    mov rax, rsp",
-                b"    " + insn.mnemonic.encode("ascii") + b" rax, rdx",
+                b"    " + insn.mnemonic.encode("ascii") + b" rax, rbx",
                 b"    add rax, 0x80",
                 b"    cmp rax, rsp",
-                b"    jb abisan_fail_mov_below_rsp",
-                b"    pop rdx",
+                b"    setb bl",
+                b"    add rax, 0x7fff80",
+                b"    cmp rax, rsp",
+                b"    seta bh",
+                b"    add bl, bh",
+                b"    cmp bl, 2",
+                b"    je abisan_fail_mov_below_rsp",
+                b"    pop rbx",
                 b"    pop rax",
                 b"    popfq",
             )
@@ -323,7 +328,6 @@ def generate_cmov_instrumentation(line: bytes, insn: CsInsn) -> bytes:
 
 
 def generate_generic_memory_instrumentation(line: bytes) -> bytes:
-    # TODO: Don't fail on heap access
     # TODO: Make size of red zone a tunable
     # TODO: Make size of stack a tunable
     return (
