@@ -18,6 +18,8 @@ def get_memory_operand(line: bytes) -> bytes:
     mnemonic: bytes = tokens[0].lower()
     assert mnemonic != b"lea"
 
+    # TODO: Support AT&T syntax
+    # TODO: Support single-quoted [ and ,.
     for operand in (token.strip() for token in tokens[1].split(b",")):
         if b"[" in operand:
             return operand
