@@ -80,7 +80,7 @@ def get_intermediate_labels(elf_file: ELFFile) -> dict[bytes, CsInsn]:
 
 
 def needs_taint_check_for_read(insn: CsInsn) -> bool:
-    # TODO: Don't check mov into stack
+    # generate_reg_taint_check handles mov into stack
     if insn.mnemonic == "push":
         return False
 
@@ -91,6 +91,7 @@ def needs_taint_check_for_read(insn: CsInsn) -> bool:
         and insn.op_count(capstone.CS_OP_REG) == 2
     ):
         return False
+
     return True
 
 
@@ -357,8 +358,46 @@ def generate_generic_memory_instrumentation(line: bytes) -> bytes:
     )
 
 
-def generate_reg_taint_check(r: int) -> bytes:
+def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int) -> bytes:
     # TODO: Make this correct for cmov
+
+    if insn.op_count(capstone.CS_OP_MEM) > 0:
+        # r is source &&
+        # A memory operand exists, so it must be the destination
+        # So, we are moving into memory
+        # If: 
+        #       r fails the taintedness check &&
+        # 	destination is not in stack
+        # Then call the fail taint check func
+
+        return (
+            b"\n".join(
+            	(
+                    b"	pushfq",
+            	    b"	push rax",
+		    b"	push rbx",
+                    b"	lea rbx, " + get_memory_operand(line),
+                    b"	add rbx, 0x80",
+               	    b"	mov rax, rsp",
+                    b"	cmp rbx, rax",
+                    b"  setb bl",
+                    f"  lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(r)}]".encode(
+                    "ascii"
+                    ),
+                    b"  mov al, byte ptr [rax]",
+                    b"  cmp al, 0",
+                    b"  setne bh",
+                    b"  add bl, bh",
+                    b"  cmp bl, 2",
+                    f"	je abisan_fail_taint_{cs.reg_name(r)}".encode(),
+                    b"	pop rbx",
+                    b"	pop rax",
+                    b"	popfq",
+	    	)
+            )
+            + b"\n"
+        )
+        
     return (
         b"\n".join(
             (
@@ -454,7 +493,7 @@ def main() -> None:
 
                 if needs_taint_check_for_read(insn):
                     for r in get_registers_read(insn):
-                        f.write(generate_reg_taint_check(r))
+                        f.write(generate_reg_taint_check(line,insn,r))
 
                 for r in get_registers_written(insn):
                     f.write(generate_reg_taint_update(r))

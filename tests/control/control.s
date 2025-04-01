@@ -2,6 +2,10 @@
 
 .globl control
 control:
+
+	  # Mov into stack
+	  mov QWORD PTR[rsp - 0x40], r11
+	
     # Add up the first 7 arguments into rax
     xor rax, rax
     add rax, rdi
@@ -71,6 +75,6 @@ control:
     cmova rcx, QWORD PTR [rsp - 0x80]
 
     # Mov from above the frame
-    mov rcx, QWORD PTR [rsp + 0x8]
+  	mov rcx, QWORD PTR [rsp + 0x8]
 
-    ret
+	  ret
