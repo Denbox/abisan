@@ -359,7 +359,6 @@ def generate_generic_memory_instrumentation(line: bytes) -> bytes:
 
 
 def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int) -> bytes:
-    # TODO: Make this correct for cmov
 
     if insn.op_count(capstone.CS_OP_MEM) > 0 and insn.mnemonic == "mov":
         # r is source &&
@@ -377,6 +376,7 @@ def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int) -> bytes:
             	    b"	push rax",
 		    b"	push rbx",
                     b"	lea rbx, " + get_memory_operand(line),
+                    b"	" + insn.menmonic.encode("ascii") + b" rax, rbx"
                     b"	add rbx, 0x80",
                     b"	cmp rbx, rsp",
                     b"	setb bl",
@@ -416,8 +416,7 @@ def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int) -> bytes:
     )
 
 
-def generate_reg_taint_update(r: int) -> bytes:
-    # TODO: Make this correct for cmov
+def generate_generic_reg_taint_update(r: int) -> bytes:
     return (
         b"\n".join(
             (
@@ -427,6 +426,21 @@ def generate_reg_taint_update(r: int) -> bytes:
                 ),
                 b"    mov byte ptr [rax], 0",
                 b"    pop rax",
+            )
+        )
+        + b"\n"
+    )
+
+def generate_cmov_reg_taint_update(line: bytes, insn: CsInsn, r: int) -> bytes:
+    return (
+        b"\n".join(
+            (
+                b"	push rax",
+                f"	lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(r)}]".encode(
+                	"ascii"
+                ),
+                b"	" + insn.mnemonic.encode("ascii") + b" byte ptr [rax], 0",
+                b"	pop rax",
             )
         )
         + b"\n"
@@ -495,7 +509,10 @@ def main() -> None:
                         f.write(generate_reg_taint_check(line,insn,r))
 
                 for r in get_registers_written(insn):
-                    f.write(generate_reg_taint_update(r))
+                    if insn.mnemonic.startswith("cmov"):
+                        f.write(generate_cmov_reg_taint_update(line,insn,r))
+                    else:
+                        f.write(generate_generic_reg_taint_update(r))
 
             f.write(line + b"\n")
 
