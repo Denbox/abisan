@@ -154,18 +154,6 @@ abisan_function_exit:
     mov rdi, QWORD PTR [rdi + FRAME_RETADDR]
     mov [rsp], rdi
 
-    # Taint everything that could have been clobbered
-    lea rdi, BYTE PTR offset abisan_taint_state[rip]
-    mov BYTE PTR [rdi + TAINT_STATE_RAX], 0 # TODO: This should be tainted for void functions
-    mov BYTE PTR [rdi + TAINT_STATE_RCX], 1
-    mov BYTE PTR [rdi + TAINT_STATE_RDX], 1 # TODO: This shouldn't be tainted for functions that return in rdx:rax
-    mov BYTE PTR [rdi + TAINT_STATE_RDI], 1
-    mov BYTE PTR [rdi + TAINT_STATE_RSI], 1
-    mov BYTE PTR [rdi + TAINT_STATE_R8], 1
-    mov BYTE PTR [rdi + TAINT_STATE_R9], 1
-    mov BYTE PTR [rdi + TAINT_STATE_R10], 1
-    mov BYTE PTR [rdi + TAINT_STATE_R11], 1
-
     # Clobber every register that we're allowed to,
     # except rax and rdx, because they're used for
     # returned values
