@@ -361,7 +361,7 @@ def generate_generic_memory_instrumentation(line: bytes) -> bytes:
 def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int) -> bytes:
     # TODO: Make this correct for cmov
 
-    if insn.op_count(capstone.CS_OP_MEM) > 0:
+    if insn.op_count(capstone.CS_OP_MEM) > 0 and insn.mnemonic == "mov":
         # r is source &&
         # A memory operand exists, so it must be the destination
         # So, we are moving into memory
@@ -378,17 +378,16 @@ def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int) -> bytes:
 		    b"	push rbx",
                     b"	lea rbx, " + get_memory_operand(line),
                     b"	add rbx, 0x80",
-               	    b"	mov rax, rsp",
-                    b"	cmp rbx, rax",
-                    b"  setb bl",
-                    f"  lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(r)}]".encode(
+                    b"	cmp rbx, rsp",
+                    b"	setb bl",
+                    f"	lea rax , offset abisan_taint_state[rip + {cs_to_taint_idx(r)}]".encode(
                     "ascii"
                     ),
-                    b"  mov al, byte ptr [rax]",
-                    b"  cmp al, 0",
-                    b"  setne bh",
-                    b"  add bl, bh",
-                    b"  cmp bl, 2",
+                    b"	mov al, byte ptr [rax]",
+                    b"	cmp al, 0",
+                    b"	setne bh",
+                    b"	add bl, bh",
+                    b"	cmp bl, 2",
                     f"	je abisan_fail_taint_{cs.reg_name(r)}".encode(),
                     b"	pop rbx",
                     b"	pop rax",
