@@ -502,8 +502,8 @@ def main() -> None:
 
     red_zone_size: int = INIT_RED_ZONE_SIZE
     stack_size: int = INIT_STACK_SIZE
-    if(len(sys.argv) >= 3): red_zone_size = int(sys.argv[2])
-    if(len(sys.argv) >= 4): stack_size = int(sys.argv[3])
+    if(len(sys.argv) >= 3): red_zone_size = int(sys.argv[2], 16)
+    if(len(sys.argv) >= 4): stack_size = int(sys.argv[3], 16)
         
     # Improper arguments when:
     # - any sizes are < 0x8 (size of address in 64bit)
