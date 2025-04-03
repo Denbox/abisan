@@ -27,6 +27,10 @@ TAINT_STATE_R11: int = 9
 #TAINT_STATE_RBP: int = 14
 #TAINT_STATE_EFLAGS: int = 15
 
+INIT_RED_ZONE_SIZE: int = 0x80
+INIT_STACK_SIZE: int = 0x800000
+
+
 def get_memory_operand(line: bytes) -> bytes:
     tokens: list[bytes] = line.split(maxsplit=1)
     assert len(tokens) == 2
@@ -318,7 +322,7 @@ def cs_to_taint_idx(r: int) -> int:
     sys.exit(1)
 
 
-def generate_cmov_instrumentation(line: bytes, insn: CsInsn) -> bytes:
+def generate_cmov_instrumentation(line: bytes, insn: CsInsn, red_zone_size: int, stack_size: int) -> bytes:
     return (
         b"\n".join(
             (
@@ -328,10 +332,10 @@ def generate_cmov_instrumentation(line: bytes, insn: CsInsn) -> bytes:
                 b"    lea rbx, " + get_memory_operand(line),
                 b"    mov rax, rsp",
                 b"    " + insn.mnemonic.encode("ascii") + b" rax, rbx",
-                b"    add rax, 0x80",
+                b"    add rax, " + hex(red_zone_size).encode("ascii"),
                 b"    cmp rax, rsp",
                 b"    setb bl",
-                b"    add rax, 0x7fff80",
+                b"    add rax, " + hex(stack_size - red_zone_size).encode("ascii"),
                 b"    cmp rax, rsp",
                 b"    seta bh",
                 b"    add bl, bh",
@@ -346,7 +350,7 @@ def generate_cmov_instrumentation(line: bytes, insn: CsInsn) -> bytes:
     )
 
 
-def generate_generic_memory_instrumentation(line: bytes) -> bytes:
+def generate_generic_memory_instrumentation(line: bytes, red_zone_size: int, stack_size: int) -> bytes:
     # TODO: Make size of red zone a tunable
     # TODO: Make size of stack a tunable
     return (
@@ -356,10 +360,10 @@ def generate_generic_memory_instrumentation(line: bytes) -> bytes:
                 b"    push rax",
                 b"    push rbx",
                 b"    lea rax, " + get_memory_operand(line),
-                b"    add rax, 0x80",
+                b"    add rax, " + hex(red_zone_size).encode("ascii"),
                 b"    cmp rax, rsp",
                 b"    setb bl",
-                b"    add rax, 0x7fff80",
+                b"    add rax, " + hex(stack_size - red_zone_size).encode("ascii"),
                 b"    cmp rax, rsp",
                 b"    seta bh",
                 b"    add bl, bh",
@@ -374,7 +378,7 @@ def generate_generic_memory_instrumentation(line: bytes) -> bytes:
     )
 
 
-def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int) -> bytes:
+def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int, red_zone_size: int) -> bytes:
 
     if insn.op_count(capstone.CS_OP_MEM) > 0 and insn.mnemonic == "mov":
         # r is source &&
@@ -393,7 +397,7 @@ def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int) -> bytes:
 		    b"	push rbx",
                     b"	lea rbx, " + get_memory_operand(line),
                     b"	" + insn.mnemonic.encode("ascii") + b" rax, rbx",
-                    b"	add rbx, 0x80",
+                    b"	add rbx, " + hex(red_zone_size).encode("ascii"),
                     b"	cmp rbx, rsp",
                     b"	setb bl",
                     f"	lea rax , offset abisan_taint_state[rip + {cs_to_taint_idx(r)}]".encode(
@@ -492,10 +496,25 @@ def generate_taint_after_call()-> bytes:
     )
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        print(f"Usage: python3 {sys.argv[0]} <assembly_file>", file=sys.stderr)
+    if len(sys.argv) < 2 or len(sys.argv) > 4:
+        print(f"Usage: python3 {sys.argv[0]} <assembly_file> [red_zone_size] [stack_size]", file=sys.stderr)
         sys.exit(1)
 
+    red_zone_size: int = INIT_RED_ZONE_SIZE
+    stack_size: int = INIT_STACK_SIZE
+    if(len(sys.argv) >= 3): red_zone_size = int(sys.argv[2])
+    if(len(sys.argv) >= 4): stack_size = int(sys.argv[3])
+        
+    # Improper arguments when:
+    # - any sizes are < 0x8 (size of address in 64bit)
+    # - red zone is larger than the size of the stack
+    # - any sizes are not multiples of 8 (aligned)
+    # TODO: Support 32bit
+    if red_zone_size < 8 or red_zone_size >= stack_size or red_zone_size % 8 != 0 or stack_size % 8 != 0:
+        print(f"Tunables must be greater than the size of an address, stack aligned, and red zone must be smaller than the stack. Red Zone Size {red_zone_size} or Stack Size {stack_size} is invalid.", file=sys.stderr)
+        sys.exit(1)
+
+        
     input_file_name: str = sys.argv[1]
     _, input_file_name_suffix = input_file_name.rsplit(".", maxsplit=1)
     intermediate_file_name: str = f"{input_file_name}.abisan.intermediate.{input_file_name_suffix}"
@@ -544,13 +563,13 @@ def main() -> None:
                 registers_written: set[int] = get_registers_written(insn)
                 if insn.op_count(capstone.CS_OP_MEM) > 0 and insn.mnemonic != "lea":
                     if insn.mnemonic.startswith("cmov"):
-                        f.write(generate_cmov_instrumentation(line, insn))
+                        f.write(generate_cmov_instrumentation(line, insn, red_zone_size, stack_size))
                     else:
-                        f.write(generate_generic_memory_instrumentation(line))
+                        f.write(generate_generic_memory_instrumentation(line, red_zone_size, stack_size))
 
                 if needs_taint_check_for_read(insn):
                     for r in get_registers_read(insn):
-                        f.write(generate_reg_taint_check(line,insn,r))
+                        f.write(generate_reg_taint_check(line,insn,r,red_zone_size))
 
                 for r in get_registers_written(insn):
                     if insn.mnemonic.startswith("cmov"):
