@@ -11,7 +11,7 @@ cs: Cs = Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
 cs.detail = True
 
 TAINT_STATE_RAX: int = 0
-#TAINT_STATE_RBX: int = 1
+# TAINT_STATE_RBX: int = 1
 TAINT_STATE_RCX: int = 2
 TAINT_STATE_RDX: int = 3
 TAINT_STATE_RDI: int = 4
@@ -20,12 +20,12 @@ TAINT_STATE_R8: int = 6
 TAINT_STATE_R9: int = 7
 TAINT_STATE_R10: int = 8
 TAINT_STATE_R11: int = 9
-#TAINT_STATE_R12: int = 10
-#TAINT_STATE_R13: int = 11
-#TAINT_STATE_R14: int = 12
-#TAINT_STATE_R15: int = 13
-#TAINT_STATE_RBP: int = 14
-#TAINT_STATE_EFLAGS: int = 15
+# TAINT_STATE_R12: int = 10
+# TAINT_STATE_R13: int = 11
+# TAINT_STATE_R14: int = 12
+# TAINT_STATE_R15: int = 13
+# TAINT_STATE_RBP: int = 14
+# TAINT_STATE_EFLAGS: int = 15
 
 INIT_RED_ZONE_SIZE: int = 0x80
 INIT_STACK_SIZE: int = 0x800000
@@ -142,9 +142,6 @@ def get_registers_written(insn: CsInsn) -> set[int]:
     for op in insn.operands:
         if op.type == capstone.CS_OP_REG and op.access & capstone.CS_AC_WRITE:
             result.add(op.reg)
-
-    if insn.mnemonic == "call":
-        result.add(x86_const.X86_REG_RAX)
 
     return set(
         filter(lambda r: r not in _UNUSED_REGISTERS, map(register_normalize, result))
@@ -322,7 +319,9 @@ def cs_to_taint_idx(r: int) -> int:
     sys.exit(1)
 
 
-def generate_cmov_instrumentation(line: bytes, insn: CsInsn, red_zone_size: int, stack_size: int) -> bytes:
+def generate_cmov_instrumentation(
+    line: bytes, insn: CsInsn, red_zone_size: int, stack_size: int
+) -> bytes:
     return (
         b"\n".join(
             (
@@ -350,7 +349,9 @@ def generate_cmov_instrumentation(line: bytes, insn: CsInsn, red_zone_size: int,
     )
 
 
-def generate_generic_memory_instrumentation(line: bytes, red_zone_size: int, stack_size: int) -> bytes:
+def generate_generic_memory_instrumentation(
+    line: bytes, red_zone_size: int, stack_size: int
+) -> bytes:
     # TODO: Make size of red zone a tunable
     # TODO: Make size of stack a tunable
     return (
@@ -378,45 +379,47 @@ def generate_generic_memory_instrumentation(line: bytes, red_zone_size: int, sta
     )
 
 
-def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int, red_zone_size: int) -> bytes:
+def generate_reg_taint_check(
+    line: bytes, insn: CsInsn, r: int, red_zone_size: int
+) -> bytes:
 
     if insn.op_count(capstone.CS_OP_MEM) > 0 and insn.mnemonic == "mov":
         # r is source &&
         # A memory operand exists, so it must be the destination
         # So, we are moving into memory
-        # If: 
-        #       r fails the taintedness check &&
-        # 	destination is not in stack
+        # If:
+        #     r fails the taintedness check &&
+        #     destination is not in stack
         # Then call the fail taint check func
 
         return (
             b"\n".join(
-            	(
-                    b"	pushfq",
-            	    b"	push rax",
-		    b"	push rbx",
-                    b"	lea rbx, " + get_memory_operand(line),
-                    b"	" + insn.mnemonic.encode("ascii") + b" rax, rbx",
-                    b"	add rbx, " + hex(red_zone_size).encode("ascii"),
-                    b"	cmp rbx, rsp",
-                    b"	setb bl",
-                    f"	lea rax , offset abisan_taint_state[rip + {cs_to_taint_idx(r)}]".encode(
-                    "ascii"
+                (
+                    b"    pushfq",
+                    b"    push rax",
+                    b"    push rbx",
+                    b"    lea rbx, " + get_memory_operand(line),
+                    b"    " + insn.mnemonic.encode("ascii") + b" rax, rbx",
+                    b"    add rbx, " + hex(red_zone_size).encode("ascii"),
+                    b"    cmp rbx, rsp",
+                    b"    setb bl",
+                    f"    lea rax , offset abisan_taint_state[rip + {cs_to_taint_idx(r)}]".encode(
+                        "ascii"
                     ),
-                    b"	mov al, byte ptr [rax]",
-                    b"	cmp al, 0",
-                    b"	setne bh",
-                    b"	add bl, bh",
-                    b"	cmp bl, 2",
-                    f"	je abisan_fail_taint_{cs.reg_name(r)}".encode(),
-                    b"	pop rbx",
-                    b"	pop rax",
-                    b"	popfq",
-	    	)
+                    b"    mov al, byte ptr [rax]",
+                    b"    cmp al, 0",
+                    b"    setne bh",
+                    b"    add bl, bh",
+                    b"    cmp bl, 2",
+                    f"    je abisan_fail_taint_{cs.reg_name(r)}".encode(),
+                    b"    pop rbx",
+                    b"    pop rax",
+                    b"    popfq",
+                )
             )
             + b"\n"
         )
-        
+
     return (
         b"\n".join(
             (
@@ -451,73 +454,90 @@ def generate_generic_reg_taint_update(r: int) -> bytes:
         + b"\n"
     )
 
+
 def generate_cmov_reg_taint_update(line: bytes, insn: CsInsn, r: int) -> bytes:
     return (
         b"\n".join(
             (
-                b"	push rax",
-                b"	push rbx",
-                b" 	push rcx",
-                f"	lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(r)}]".encode(
-                	"ascii"
+                b"    push rax",
+                b"    push rbx",
+                b"     push rcx",
+                f"    lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(r)}]".encode(
+                    "ascii"
                 ),
-                b"	mov bl, byte ptr [rax]",
-                b"	mov rcx, 0",
-                b"	" + insn.mnemonic.encode("ascii") + b" rbx, rcx",
-            	b"	mov byte ptr [rax], bl",
-                b"	pop rcx",
-                b"	pop rbx",
-                b"	pop rax",
+                b"    mov bl, byte ptr [rax]",
+                b"    mov rcx, 0",
+                b"    " + insn.mnemonic.encode("ascii") + b" rbx, rcx",
+                b"    mov byte ptr [rax], bl",
+                b"    pop rcx",
+                b"    pop rbx",
+                b"    pop rax",
             )
         )
         + b"\n"
     )
 
-def generate_taint_after_call()-> bytes:
+
+def generate_taint_after_call() -> bytes:
     # Taint everything that could have been clobbered in a call
     return (
         b"\n".join(
             (
-                b"	push rdi",
-                b"	lea rdi, byte ptr offset abisan_taint_state[rip]",
-                f"	mov byte ptr [rdi + {TAINT_STATE_RAX}], 0".encode(), # TODO: This should be tainted for void functions
-                f"	mov byte ptr [rdi + {TAINT_STATE_RCX}], 1".encode(),
-                f"	mov byte ptr [rdi + {TAINT_STATE_RDX}], 1".encode(),  # TODO: This shouldn't be tainted for functions that return in rdx:rax
-                f"	mov byte ptr [rdi + {TAINT_STATE_RDI}], 1".encode(),
-                f"	mov byte ptr [rdi + {TAINT_STATE_RSI}], 1".encode(),
-                f"	mov byte ptr [rdi + {TAINT_STATE_R8}], 1".encode(),
-                f"	mov byte ptr [rdi + {TAINT_STATE_R9}], 1".encode(),
-                f"	mov byte ptr [rdi + {TAINT_STATE_R10}], 1".encode(),
-                f"	mov byte ptr [rdi + {TAINT_STATE_R11}], 1".encode(),
-                b"	pop rdi",
+                b"    push rdi",
+                b"    lea rdi, byte ptr offset abisan_taint_state[rip]",
+                f"    mov byte ptr [rdi + {TAINT_STATE_RAX}], 0".encode(),  # TODO: This should be tainted for void functions
+                f"    mov byte ptr [rdi + {TAINT_STATE_RCX}], 1".encode(),
+                f"    mov byte ptr [rdi + {TAINT_STATE_RDX}], 1".encode(),  # TODO: This shouldn't be tainted for functions that return in rdx:rax
+                f"    mov byte ptr [rdi + {TAINT_STATE_RDI}], 1".encode(),
+                f"    mov byte ptr [rdi + {TAINT_STATE_RSI}], 1".encode(),
+                f"    mov byte ptr [rdi + {TAINT_STATE_R8}], 1".encode(),
+                f"    mov byte ptr [rdi + {TAINT_STATE_R9}], 1".encode(),
+                f"    mov byte ptr [rdi + {TAINT_STATE_R10}], 1".encode(),
+                f"    mov byte ptr [rdi + {TAINT_STATE_R11}], 1".encode(),
+                b"    pop rdi",
             )
         )
         + b"\n"
     )
 
+
 def main() -> None:
     if len(sys.argv) < 2 or len(sys.argv) > 4:
-        print(f"Usage: python3 {sys.argv[0]} <assembly_file> [red_zone_size] [stack_size]", file=sys.stderr)
+        print(
+            f"Usage: python3 {sys.argv[0]} <assembly_file> [red_zone_size] [stack_size]",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     red_zone_size: int = INIT_RED_ZONE_SIZE
     stack_size: int = INIT_STACK_SIZE
-    if(len(sys.argv) >= 3): red_zone_size = int(sys.argv[2], 16)
-    if(len(sys.argv) >= 4): stack_size = int(sys.argv[3], 16)
-        
+    if len(sys.argv) >= 3:
+        red_zone_size = int(sys.argv[2], 16)
+    if len(sys.argv) >= 4:
+        stack_size = int(sys.argv[3], 16)
+
     # Improper arguments when:
     # - any sizes are < 0x8 (size of address in 64bit)
     # - red zone is larger than the size of the stack
     # - any sizes are not multiples of 8 (aligned)
     # TODO: Support 32bit
-    if red_zone_size < 8 or red_zone_size >= stack_size or red_zone_size % 8 != 0 or stack_size % 8 != 0:
-        print(f"Tunables must be greater than the size of an address, stack aligned, and red zone must be smaller than the stack. Red Zone Size {red_zone_size} or Stack Size {stack_size} is invalid.", file=sys.stderr)
+    if (
+        red_zone_size < 8
+        or red_zone_size >= stack_size
+        or red_zone_size % 8 != 0
+        or stack_size % 8 != 0
+    ):
+        print(
+            f"Tunables must be greater than the size of an address, stack aligned, and red zone must be smaller than the stack. Red Zone Size {red_zone_size} or Stack Size {stack_size} is invalid.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
-        
     input_file_name: str = sys.argv[1]
     _, input_file_name_suffix = input_file_name.rsplit(".", maxsplit=1)
-    intermediate_file_name: str = f"{input_file_name}.abisan.intermediate.{input_file_name_suffix}"
+    intermediate_file_name: str = (
+        f"{input_file_name}.abisan.intermediate.{input_file_name_suffix}"
+    )
     intermediate_object_file_name: str = f"{intermediate_file_name}.o"
 
     with open(sys.argv[1], "rb") as f:
@@ -563,17 +583,25 @@ def main() -> None:
                 registers_written: set[int] = get_registers_written(insn)
                 if insn.op_count(capstone.CS_OP_MEM) > 0 and insn.mnemonic != "lea":
                     if insn.mnemonic.startswith("cmov"):
-                        f.write(generate_cmov_instrumentation(line, insn, red_zone_size, stack_size))
+                        f.write(
+                            generate_cmov_instrumentation(
+                                line, insn, red_zone_size, stack_size
+                            )
+                        )
                     else:
-                        f.write(generate_generic_memory_instrumentation(line, red_zone_size, stack_size))
+                        f.write(
+                            generate_generic_memory_instrumentation(
+                                line, red_zone_size, stack_size
+                            )
+                        )
 
                 if needs_taint_check_for_read(insn):
                     for r in get_registers_read(insn):
-                        f.write(generate_reg_taint_check(line,insn,r,red_zone_size))
+                        f.write(generate_reg_taint_check(line, insn, r, red_zone_size))
 
                 for r in get_registers_written(insn):
                     if insn.mnemonic.startswith("cmov"):
-                        f.write(generate_cmov_reg_taint_update(line,insn,r))
+                        f.write(generate_cmov_reg_taint_update(line, insn, r))
                     else:
                         f.write(generate_generic_reg_taint_update(r))
 
@@ -581,7 +609,7 @@ def main() -> None:
 
             if insn is not None and insn.mnemonic.startswith("call"):
                 f.write(generate_taint_after_call())
-                
+
             if get_label_name(line) in global_symbols:
                 f.write(b"    call abisan_function_entry\n")
 
