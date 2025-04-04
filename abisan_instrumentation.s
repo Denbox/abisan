@@ -77,12 +77,7 @@ abisan_function_entry:
     lea rbx, offset abisan_taint_state[rip]
     mov BYTE PTR [rbx + TAINT_STATE_RAX], 1
     mov BYTE PTR [rbx + TAINT_STATE_RBX], 1
-    #mov BYTE PTR [rbx + TAINT_STATE_RCX], 0 # TODO: This is only valid for functions with >=4 arg
-    #mov BYTE PTR [rbx + TAINT_STATE_RDX], 0 # TODO: This is only valid for functions with >=3 arg
-    #mov BYTE PTR [rbx + TAINT_STATE_RDI], 0 # TODO: This is only valid for functions with >=1 arg
-    #mov BYTE PTR [rbx + TAINT_STATE_RSI], 0 # TODO: This is only valid for functions with >=2 arg
-    #mov BYTE PTR [rbx + TAINT_STATE_R8], 0 # TODO: This is only valid for functions with >=5 arg
-    #mov BYTE PTR [rbx + TAINT_STATE_R9], 0 # TODO: This is only valid for functions with >=6 arg
+    # Argument Registers are now updated after every call in instrument.py
     mov BYTE PTR [rbx + TAINT_STATE_R10], 1
     mov BYTE PTR [rbx + TAINT_STATE_R11], 1
     mov BYTE PTR [rbx + TAINT_STATE_R12], 1
