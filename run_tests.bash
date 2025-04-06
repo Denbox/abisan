@@ -24,9 +24,9 @@ declare -A expected_results=(
 passed=True
 
 for t in tests/*; do
-    pushd $t
+	pushd $t
 
-    make clean
+	make clean
    	make
 
 	# check for expected exit value
