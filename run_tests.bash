@@ -30,7 +30,7 @@ for t in tests/*; do
    	make
 
 	# check for expected exit value
-	default to 1 if not in array
+	# default to 1 if not in array
 	expected_exit_val=${expected_results[$t]:-1}
 	  
 	./test.bash
