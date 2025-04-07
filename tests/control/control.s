@@ -1,10 +1,10 @@
-.intel_syntax noprefix
+.intel_syntax noprefix 
 
 .globl control
 control:
 
-	  # Mov into stack
-	  mov QWORD PTR[rsp - 0x40], r11
+	# Mov into stack
+	mov QWORD PTR[rsp+0x10], r11
 	
     # Add up the first 7 arguments into rax
     xor rax, rax
@@ -48,33 +48,7 @@ control:
     xor r11, r11
     xor r11, r11
 
-    # Zero the red zone
-    mov QWORD PTR [rsp - 0x08], rcx
-    mov QWORD PTR [rsp - 0x10], rcx
-    mov QWORD PTR [rsp - 0x18], rcx
-    mov QWORD PTR [rsp - 0x20], rcx
-    mov QWORD PTR [rsp - 0x28], rcx
-    mov QWORD PTR [rsp - 0x30], rcx
-    mov QWORD PTR [rsp - 0x38], rcx
-    mov QWORD PTR [rsp - 0x40], rcx
-    mov QWORD PTR [rsp - 0x48], rcx
-    mov QWORD PTR [rsp - 0x50], rcx
-    mov QWORD PTR [rsp - 0x58], rcx
-    mov QWORD PTR [rsp - 0x60], rcx
-    mov QWORD PTR [rsp - 0x68], rcx
-    mov QWORD PTR [rsp - 0x70], rcx
-    mov QWORD PTR [rsp - 0x78], rcx
-    mov QWORD PTR [rsp - 0x80], rcx
-
-    # Conditional mov from below the red zone with a false condition
-    mov rdi, 1
-    cmp rdi, 0
-    cmovbe rcx, QWORD PTR [rsp - 0x88]
-
-    # Conditional mov in the red zone with a true condition
-    cmova rcx, QWORD PTR [rsp - 0x80]
-
     # Mov from above the frame
   	mov rcx, QWORD PTR [rsp + 0x8]
 
-	  ret
+	ret
