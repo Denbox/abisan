@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -euo pipefail
+set -uo pipefail
 
 # The error code associated with a successful test
 # ie. a test that is supposed to fail exits 1, otherwise 0
