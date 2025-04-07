@@ -1,11 +1,15 @@
 import os
 import subprocess
 import sys
+import re
 
 import capstone  # type: ignore
 from capstone import Cs, CsInsn, x86_const
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import Section, SymbolTableSection
+
+import dataclasses
+
 
 cs: Cs = Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
 cs.detail = True
@@ -27,8 +31,49 @@ TAINT_STATE_R11: int = 9
 # TAINT_STATE_RBP: int = 14
 # TAINT_STATE_EFLAGS: int = 15
 
-INIT_RED_ZONE_SIZE: int = 0x80
-INIT_STACK_SIZE: int = 0x800000
+REDZONE_SIZE = 0x80
+
+
+@dataclasses.dataclass
+class Config:
+    redzone_enabled: bool
+    stack_size: int
+
+def env_usage_error():
+    print(
+    	f"Environment Variables Usage: REDZONE_ENABLED=INT;STACK_SIZE=HEX_INT",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+            
+# Expects Environment variables to be semicolon separated
+# REDZONE_ENABLED = int
+# STACK_SIZE = hex int
+def parse_tunable_envs(tunables: str):
+    redzone_enabled: bool = False
+    stack_size: int = 0x800000
+
+    if len(tunables) > 0:
+        if tunables.startswith('REDZONE_ENABLED='):
+            
+            tunables: str = tunables[len('REDZONE_ENABLED='):]
+            value_renabled: re.Match[str] = re.match(r"\A(?P<value>[0-9]+)", tunables)
+            if value_renabled is None: env_usage_error()
+                
+            redzone_enabled = bool(int(value_renabled["value"]))
+                
+
+            tunables: str = tunables[len(value_renabled["value"]):]
+
+            if len(tunables) > 0 and not tunables.startswith(';'): env_usage_error()
+            
+            if tunables.startswith(';STACK_SIZE='):
+                tunables: str = tunables[len(';STACK_SIZE='):]
+                value_ssize: re.Match[str] = re.match(r"\A(?P<value>0x[0-9]+)", tunables)
+                if value_ssize is None: env_usage_error()
+                stack_size = int(value_ssize["value"], 16)
+                    
+    return Config(redzone_enabled, stack_size)
 
 
 def get_memory_operand(line: bytes) -> bytes:
@@ -318,9 +363,8 @@ def cs_to_taint_idx(r: int) -> int:
     print("Unsupported register {cs.reg_name(r)}", file=sys.stderr)
     sys.exit(1)
 
-
 def generate_cmov_instrumentation(
-    line: bytes, insn: CsInsn, red_zone_size: int, stack_size: int
+    line: bytes, insn: CsInsn, config: Config
 ) -> bytes:
     return (
         b"\n".join(
@@ -331,10 +375,10 @@ def generate_cmov_instrumentation(
                 b"    lea rbx, " + get_memory_operand(line),
                 b"    mov rax, rsp",
                 b"    " + insn.mnemonic.encode("ascii") + b" rax, rbx",
-                b"    add rax, " + hex(red_zone_size).encode("ascii"),
+                b"    add rax, " + hex(REDZONE_SIZE).encode("ascii"),
                 b"    cmp rax, rsp",
                 b"    setb bl",
-                b"    add rax, " + hex(stack_size - red_zone_size).encode("ascii"),
+                b"    add rax, " + hex(config.stack_size - REDZONE_SIZE).encode("ascii"),
                 b"    cmp rax, rsp",
                 b"    seta bh",
                 b"    add bl, bh",
@@ -350,7 +394,7 @@ def generate_cmov_instrumentation(
 
 
 def generate_generic_memory_instrumentation(
-    line: bytes, red_zone_size: int, stack_size: int
+    line: bytes, config: Config
 ) -> bytes:
     # TODO: Make size of red zone a tunable
     # TODO: Make size of stack a tunable
@@ -361,10 +405,10 @@ def generate_generic_memory_instrumentation(
                 b"    push rax",
                 b"    push rbx",
                 b"    lea rax, " + get_memory_operand(line),
-                b"    add rax, " + hex(red_zone_size).encode("ascii"),
+                b"    add rax, " + hex(REDZONE_SIZE).encode("ascii"),
                 b"    cmp rax, rsp",
                 b"    setb bl",
-                b"    add rax, " + hex(stack_size - red_zone_size).encode("ascii"),
+                b"    add rax, " + hex(config.stack_size - REDZONE_SIZE).encode("ascii"),
                 b"    cmp rax, rsp",
                 b"    seta bh",
                 b"    add bl, bh",
@@ -380,7 +424,7 @@ def generate_generic_memory_instrumentation(
 
 
 def generate_reg_taint_check(
-    line: bytes, insn: CsInsn, r: int, red_zone_size: int
+    line: bytes, insn: CsInsn, r: int
 ) -> bytes:
 
     if insn.op_count(capstone.CS_OP_MEM) > 0 and insn.mnemonic == "mov":
@@ -400,7 +444,7 @@ def generate_reg_taint_check(
                     b"    push rbx",
                     b"    lea rbx, " + get_memory_operand(line),
                     b"    " + insn.mnemonic.encode("ascii") + b" rax, rbx",
-                    b"    add rbx, " + hex(red_zone_size).encode("ascii"),
+                    b"    add rbx, " + hex(REDZONE_SIZE).encode("ascii"),
                     b"    cmp rbx, rsp",
                     b"    setb bl",
                     f"    lea rax , offset abisan_taint_state[rip + {cs_to_taint_idx(r)}]".encode(
@@ -502,37 +546,38 @@ def generate_taint_after_call() -> bytes:
 
 
 def main() -> None:
-    if len(sys.argv) < 2 or len(sys.argv) > 4:
+    if len(sys.argv) != 2:
         print(
-            f"Usage: python3 {sys.argv[0]} <assembly_file> [red_zone_size] [stack_size]",
+            f"Usage: python3 {sys.argv[0]} <assembly_file>",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    red_zone_size: int = INIT_RED_ZONE_SIZE
-    stack_size: int = INIT_STACK_SIZE
-    if len(sys.argv) >= 3:
-        red_zone_size = int(sys.argv[2], 16)
-    if len(sys.argv) >= 4:
-        stack_size = int(sys.argv[3], 16)
 
+    tunables: str = os.environ.get("ABISAN_TUNABLES","")
+    config: Config = parse_tunable_envs(tunables)
+
+    if not config.redzone_enabled:
+        global REDZONE_SIZE
+        REDZONE_SIZE = 0x0
+    
     # Improper arguments when:
     # - any sizes are < 0x8 (size of address in 64bit)
     # - red zone is larger than the size of the stack
     # - any sizes are not multiples of 8 (aligned)
     # TODO: Support 32bit
     if (
-        red_zone_size < 8
-        or red_zone_size >= stack_size
-        or red_zone_size % 8 != 0
-        or stack_size % 8 != 0
+	 config.stack_size < REDZONE_SIZE
+       	 or  config.stack_size % 8 != 0
     ):
         print(
-            f"Tunables must be greater than the size of an address, stack aligned, and red zone must be smaller than the stack. Red Zone Size {red_zone_size} or Stack Size {stack_size} is invalid.",
+            f"Stack size must be stack aligned and larger than the red zone. Stack Size {config.stack_size} is invalid with red zone {REDZONE_SIZE}.",
             file=sys.stderr,
         )
         sys.exit(1)
 
+
+    
     input_file_name: str = sys.argv[1]
     _, input_file_name_suffix = input_file_name.rsplit(".", maxsplit=1)
     intermediate_file_name: str = (
@@ -585,19 +630,19 @@ def main() -> None:
                     if insn.mnemonic.startswith("cmov"):
                         f.write(
                             generate_cmov_instrumentation(
-                                line, insn, red_zone_size, stack_size
+                                line, insn, config
                             )
                         )
                     else:
                         f.write(
                             generate_generic_memory_instrumentation(
-                                line, red_zone_size, stack_size
+                                line, config
                             )
                         )
 
                 if needs_taint_check_for_read(insn):
                     for r in get_registers_read(insn):
-                        f.write(generate_reg_taint_check(line, insn, r, red_zone_size))
+                        f.write(generate_reg_taint_check(line, insn, r))
 
                 for r in get_registers_written(insn):
                     if insn.mnemonic.startswith("cmov"):
