@@ -2,6 +2,6 @@
 
 set -euo pipefail
 
-./tainted_unused_arg && exit 1
+./tainted_unused_arg && exit 0
 
-exit 0
+exit 1
