@@ -2,6 +2,6 @@
 
 set -euo pipefail
 
-./clobber_rbp && exit 0
+./clobber_rbp && exit 1
 
-exit 1
+exit 0

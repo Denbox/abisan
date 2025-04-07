@@ -2,6 +2,6 @@
 
 set -euo pipefail
 
-./access_below_red_zone && exit 0
+./access_below_red_zone && exit 1
 
-exit 1
+exit 0

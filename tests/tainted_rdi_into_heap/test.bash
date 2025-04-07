@@ -2,6 +2,6 @@
 
 set -euo pipefail
 
-./tainted_rdi_into_heap && exit 0
+./tainted_rdi_into_heap && exit 1
 
-exit 1
+exit 0
