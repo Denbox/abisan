@@ -15,7 +15,7 @@ cs: Cs = Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
 cs.detail = True
 
 TAINT_STATE_RAX: int = 0
-# TAINT_STATE_RBX: int = 1
+TAINT_STATE_RBX: int = 1
 TAINT_STATE_RCX: int = 2
 TAINT_STATE_RDX: int = 3
 TAINT_STATE_RDI: int = 4
@@ -24,12 +24,12 @@ TAINT_STATE_R8: int = 6
 TAINT_STATE_R9: int = 7
 TAINT_STATE_R10: int = 8
 TAINT_STATE_R11: int = 9
-# TAINT_STATE_R12: int = 10
-# TAINT_STATE_R13: int = 11
-# TAINT_STATE_R14: int = 12
-# TAINT_STATE_R15: int = 13
-# TAINT_STATE_RBP: int = 14
-# TAINT_STATE_EFLAGS: int = 15
+TAINT_STATE_R12: int = 10
+TAINT_STATE_R13: int = 11
+TAINT_STATE_R14: int = 12
+TAINT_STATE_R15: int = 13
+TAINT_STATE_RBP: int = 14
+TAINT_STATE_EFLAGS: int = 15
 
 REDZONE_SIZE: int = 0x80
 
@@ -183,6 +183,7 @@ def get_registers_written(insn: CsInsn) -> set[int]:
         if op.type == capstone.CS_OP_REG and op.access & capstone.CS_AC_WRITE:
             result.add(op.reg)
 
+    print(insn, "writes to", result)
     return set(
         filter(lambda r: r not in _UNUSED_REGISTERS, map(register_normalize, result))
     )
@@ -556,7 +557,7 @@ def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int, config: Config) 
                     b"    setne bh",
                     b"    add bl, bh",
                     b"    cmp bl, 2",
-                    f"    je abisan_fail_taint_{cs.reg_name(r)}".encode(),
+                    f"    je abisan_fail_taint_{cs.reg_name(r)}".encode("ascii"),
                     b"    pop rbx",
                     b"    pop rax",
                     b"    popfq",
@@ -575,7 +576,7 @@ def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int, config: Config) 
                 ),
                 b"    mov al, byte ptr [rax]",
                 b"    cmp al, 0",
-                f"    jne abisan_fail_taint_{cs.reg_name(r)}".encode(),
+                f"    jne abisan_fail_taint_{cs.reg_name(r)}".encode("ascii"),
                 b"    pop rax",
                 b"    popfq",
             )
@@ -630,15 +631,15 @@ def generate_taint_after_call() -> bytes:
             (
                 b"    push rdi",
                 b"    lea rdi, byte ptr offset abisan_taint_state[rip]",
-                f"    mov byte ptr [rdi + {TAINT_STATE_RAX}], 0".encode(),  # TODO: This should be tainted for void functions
-                f"    mov byte ptr [rdi + {TAINT_STATE_RCX}], 1".encode(),
-                f"    mov byte ptr [rdi + {TAINT_STATE_RDX}], 1".encode(),  # TODO: This shouldn't be tainted for functions that return in rdx:rax
-                f"    mov byte ptr [rdi + {TAINT_STATE_RDI}], 1".encode(),
-                f"    mov byte ptr [rdi + {TAINT_STATE_RSI}], 1".encode(),
-                f"    mov byte ptr [rdi + {TAINT_STATE_R8}], 1".encode(),
-                f"    mov byte ptr [rdi + {TAINT_STATE_R9}], 1".encode(),
-                f"    mov byte ptr [rdi + {TAINT_STATE_R10}], 1".encode(),
-                f"    mov byte ptr [rdi + {TAINT_STATE_R11}], 1".encode(),
+                f"    mov byte ptr [rdi + {TAINT_STATE_RAX}], 0".encode("ascii"),  # TODO: This should be tainted for void functions
+                f"    mov byte ptr [rdi + {TAINT_STATE_RCX}], 0xff".encode("ascii"),
+                f"    mov byte ptr [rdi + {TAINT_STATE_RDX}], 0xff".encode("ascii"),  # TODO: This shouldn't be tainted for functions that return in rdx:rax
+                f"    mov byte ptr [rdi + {TAINT_STATE_RDI}], 0xff".encode("ascii"),
+                f"    mov byte ptr [rdi + {TAINT_STATE_RSI}], 0xff".encode("ascii"),
+                f"    mov byte ptr [rdi + {TAINT_STATE_R8}], 0xff".encode("ascii"),
+                f"    mov byte ptr [rdi + {TAINT_STATE_R9}], 0xff".encode("ascii"),
+                f"    mov byte ptr [rdi + {TAINT_STATE_R10}], 0xff".encode("ascii"),
+                f"    mov byte ptr [rdi + {TAINT_STATE_R11}], 0xff".encode("ascii"),
                 b"    pop rdi",
             )
         )
