@@ -172,7 +172,7 @@ def get_registers_read(insn: CsInsn) -> set[int]:
             if op.mem.segment != 0:
                 result.add(op.mem.segment)
     return set(
-        filter(lambda r: r not in _UNUSED_REGISTERS, map(register_normalize, result))
+        filter(lambda r: r not in _UNUSED_REGISTERS, result)
     )
 
 
@@ -184,9 +184,12 @@ def get_registers_written(insn: CsInsn) -> set[int]:
             result.add(op.reg)
 
     return set(
-        filter(lambda r: r not in _UNUSED_REGISTERS, map(register_normalize, result))
+        filter(lambda r: r not in _UNUSED_REGISTERS, result)
     )
 
+# bitwise negation of 8bit int
+def bitwise_neg8(i: int) -> int:
+    return int("".join("1" if bit == "0" else "0" for bit in bin(i)[2:].zfill(8)), 2)
 
 def get_taint_mask(r: int) -> int:
     match r:
@@ -208,6 +211,7 @@ def get_taint_mask(r: int) -> int:
                 | x86_const.X86_REG_R14
                 | x86_const.X86_REG_R15
                 | x86_const.X86_REG_RIP
+                | x86_const.X86_REG_EFLAGS
         ):
             return 0xff
         case (  # 32 bit regs
@@ -228,7 +232,6 @@ def get_taint_mask(r: int) -> int:
                 | x86_const.X86_REG_R14D
                 | x86_const.X86_REG_R15D
                 | x86_const.X86_REG_EIP
-                | x86_const.X86_REG_EFLAGS
         ):
             return 0x0f
         case ( # 16 bit regs
@@ -488,8 +491,6 @@ def generate_cmov_instrumentation(line: bytes, insn: CsInsn, config: Config) -> 
 
 
 def generate_generic_memory_instrumentation(line: bytes, config: Config) -> bytes:
-    # TODO: Make size of red zone a tunable
-    # TODO: Make size of stack a tunable
     return (
         b"\n".join(
             (
@@ -524,6 +525,7 @@ def generate_generic_memory_instrumentation(line: bytes, config: Config) -> byte
 
 def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int, config: Config) -> bytes:
 
+    # print("Check | Taint mask:", hex(get_taint_mask(r)), " for ", cs.reg_name(r))
     if insn.op_count(capstone.CS_OP_MEM) > 0 and insn.mnemonic == "mov":
         # r is source &&
         # A memory operand exists, so it must be the destination
@@ -548,10 +550,11 @@ def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int, config: Config) 
                     ),
                     b"    cmp rbx, rsp",
                     b"    setb bl",
-                    f"    lea rax , offset abisan_taint_state[rip + {cs_to_taint_idx(r)}]".encode(
+                    f"    lea rax , offset abisan_taint_state[rip + {cs_to_taint_idx(register_normalize(r))}]".encode(
                         "ascii"
                     ),
                     b"    mov al, byte ptr [rax]",
+                    f"    and al, {get_taint_mask(r)}".encode("ascii"),
                     b"    cmp al, 0",
                     b"    setne bh",
                     b"    add bl, bh",
@@ -570,10 +573,11 @@ def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int, config: Config) 
             (
                 b"    pushfq",
                 b"    push rax",
-                f"    lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(r)}]".encode(
+                f"    lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(register_normalize(r))}]".encode(
                     "ascii"
                 ),
                 b"    mov al, byte ptr [rax]",
+                f"    and al, {get_taint_mask(r)}".encode("ascii"),
                 b"    cmp al, 0",
                 f"    jne abisan_fail_taint_{cs.reg_name(r)}".encode("ascii"),
                 b"    pop rax",
@@ -585,14 +589,13 @@ def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int, config: Config) 
 
 
 def generate_generic_reg_taint_update(r: int) -> bytes:
+    # print("Update | Taint mask:", hex(get_taint_mask(r)), " for ", cs.reg_name(r), "\n Bitwise negated Taint Mask:", bin(bitwise_neg8(get_taint_mask(r))))
     return (
         b"\n".join(
             (
                 b"    push rax",
-                f"    lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(r)}]".encode(
-                    "ascii"
-                ),
-                b"    mov byte ptr [rax], 0",
+                f"    lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(register_normalize(r))}]".encode("ascii"),
+                f"    and byte ptr [rax], {bitwise_neg8(get_taint_mask(r))}".encode("ascii"),
                 b"    pop rax",
             )
         )
@@ -606,14 +609,17 @@ def generate_cmov_reg_taint_update(line: bytes, insn: CsInsn, r: int) -> bytes:
             (
                 b"    push rax",
                 b"    push rbx",
-                b"     push rcx",
-                f"    lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(r)}]".encode(
+                b"    push rcx",
+                b"    pushfq",
+                f"    lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(register_normalize(r))}]".encode(
                     "ascii"
                 ),
                 b"    mov bl, byte ptr [rax]",
-                b"    mov rcx, 0",
+                b"    mov cl, bl",
+                f"    and cl, {bitwise_neg8(get_taint_mask(r))}".encode("ascii"),
                 b"    " + insn.mnemonic.encode("ascii") + b" rbx, rcx",
-                b"    mov byte ptr [rax], bl",
+                b"    mov byte ptr [rax], bl", # TODO: UPDATE FOR MASKS
+                b"    popfq",
                 b"    pop rcx",
                 b"    pop rbx",
                 b"    pop rax",
