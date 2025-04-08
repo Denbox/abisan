@@ -188,6 +188,99 @@ def get_registers_written(insn: CsInsn) -> set[int]:
     )
 
 
+def get_taint_mask(r: int) -> int:
+    match r:
+        case (  # 64 bit regs
+                x86_const.X86_REG_RAX
+                | x86_const.X86_REG_RBX
+                | x86_const.X86_REG_RCX
+                | x86_const.X86_REG_RDX
+                | x86_const.X86_REG_RSI
+                | x86_const.X86_REG_RDI
+                | x86_const.X86_REG_RBP
+                | x86_const.X86_REG_RSP
+                | x86_const.X86_REG_R8
+                | x86_const.X86_REG_R9
+                | x86_const.X86_REG_R10
+                | x86_const.X86_REG_R11
+                | x86_const.X86_REG_R12
+                | x86_const.X86_REG_R13
+                | x86_const.X86_REG_R14
+                | x86_const.X86_REG_R15
+                | x86_const.X86_REG_RIP
+        ):
+            return 0xff
+        case (  # 32 bit regs
+                x86_const.X86_REG_EAX
+                | x86_const.X86_REG_EBX
+                | x86_const.X86_REG_ECX
+                | x86_const.X86_REG_EDX
+                | x86_const.X86_REG_ESI
+                | x86_const.X86_REG_EDI
+                | x86_const.X86_REG_EBP
+                | x86_const.X86_REG_ESP
+                | x86_const.X86_REG_R8D
+                | x86_const.X86_REG_R9D
+                | x86_const.X86_REG_R10D
+                | x86_const.X86_REG_R11D
+                | x86_const.X86_REG_R12D
+                | x86_const.X86_REG_R13D
+                | x86_const.X86_REG_R14D
+                | x86_const.X86_REG_R15D
+                | x86_const.X86_REG_EIP
+                | x86_const.X86_REG_EFLAGS
+        ):
+            return 0x0f
+        case ( # 16 bit regs
+                x86_const.X86_REG_AX
+                | x86_const.X86_REG_BX
+                | x86_const.X86_REG_CX
+                | x86_const.X86_REG_DX
+                | x86_const.X86_REG_SI
+                | x86_const.X86_REG_DI
+                | x86_const.X86_REG_BP
+                | x86_const.X86_REG_SP
+                | x86_const.X86_REG_R8W
+                | x86_const.X86_REG_R9W
+                | x86_const.X86_REG_R10W
+                | x86_const.X86_REG_R11W
+                | x86_const.X86_REG_R12W
+                | x86_const.X86_REG_R13W
+                | x86_const.X86_REG_R14W
+                | x86_const.X86_REG_R15W
+                | x86_const.X86_REG_IP
+        ):
+            return 0x03
+        case ( # high 8 bit regs
+                x86_const.X86_REG_AH
+                | x86_const.X86_REG_BH
+                | x86_const.X86_REG_CH
+                | x86_const.X86_REG_DH
+        ):
+            return 0x02
+        case ( # low 8 bit regs
+                x86_const.X86_REG_AL
+                | x86_const.X86_REG_BL
+                | x86_const.X86_REG_CL
+                | x86_const.X86_REG_DL
+                | x86_const.X86_REG_SIL
+                | x86_const.X86_REG_DIL
+                | x86_const.X86_REG_BPL
+                | x86_const.X86_REG_SPL
+                | x86_const.X86_REG_R8B
+                | x86_const.X86_REG_R9B
+                | x86_const.X86_REG_R10B
+                | x86_const.X86_REG_R11B
+                | x86_const.X86_REG_R12B
+                | x86_const.X86_REG_R13B
+                | x86_const.X86_REG_R14B
+                | x86_const.X86_REG_R15B
+        ):
+            return 0x01
+        
+    print("Unsupported register {cs.reg_name(r)}", file=sys.stderr)
+    sys.exit(1)
+    
 def register_normalize(r: int) -> int:
     match r:
         case (
