@@ -75,17 +75,17 @@ abisan_function_entry:
     mov QWORD PTR offset abisan_shadow_stack_pointer[rip], rbx
 
     lea rbx, offset abisan_taint_state[rip]
-    mov BYTE PTR [rbx + TAINT_STATE_RAX], 1
-    mov BYTE PTR [rbx + TAINT_STATE_RBX], 1
+    mov BYTE PTR [rbx + TAINT_STATE_RAX], 0xff
+    mov BYTE PTR [rbx + TAINT_STATE_RBX], 0xff
     # Argument Registers are now updated after every call in instrument.py
-    mov BYTE PTR [rbx + TAINT_STATE_R10], 1
-    mov BYTE PTR [rbx + TAINT_STATE_R11], 1
-    mov BYTE PTR [rbx + TAINT_STATE_R12], 1
-    mov BYTE PTR [rbx + TAINT_STATE_R13], 1
-    mov BYTE PTR [rbx + TAINT_STATE_R14], 1
-    mov BYTE PTR [rbx + TAINT_STATE_R15], 1
-    mov BYTE PTR [rbx + TAINT_STATE_RBP], 1
-    mov BYTE PTR [rbx + TAINT_STATE_EFLAGS], 1
+    mov BYTE PTR [rbx + TAINT_STATE_R10], 0xff
+    mov BYTE PTR [rbx + TAINT_STATE_R11], 0xff
+    mov BYTE PTR [rbx + TAINT_STATE_R12], 0xff
+    mov BYTE PTR [rbx + TAINT_STATE_R13], 0xff
+    mov BYTE PTR [rbx + TAINT_STATE_R14], 0xff
+    mov BYTE PTR [rbx + TAINT_STATE_R15], 0xff
+    mov BYTE PTR [rbx + TAINT_STATE_RBP], 0xff
+    mov BYTE PTR [rbx + TAINT_STATE_EFLAGS], 0xff
 
     # Put rbx back the way it was
     mov rbx, QWORD PTR [r11 + FRAME_RBX]

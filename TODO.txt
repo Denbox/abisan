@@ -8,4 +8,3 @@
 8. Make taint tracking accurate for smaller registers
 9. Integrate with a compiler fuzzer or fuzzer for a project that uses handwritten assembly.
 10. Integrate with a kernel
-11. Make shadow stack size a tunable
