@@ -183,7 +183,6 @@ def get_registers_written(insn: CsInsn) -> set[int]:
         if op.type == capstone.CS_OP_REG and op.access & capstone.CS_AC_WRITE:
             result.add(op.reg)
 
-    print(insn, "writes to", result)
     return set(
         filter(lambda r: r not in _UNUSED_REGISTERS, map(register_normalize, result))
     )
