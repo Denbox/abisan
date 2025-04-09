@@ -37,6 +37,15 @@ control:
     call free
     pop rax
 
+	# Write to volatile 64bit reg, read from its sub-regs
+    push rax
+    mov r11, 0x12345678
+    mov al, r11b # Low 8 bits
+    mov ax, r11w # Low 16 bits
+    mov eax, r11d # low 32 bits
+    mov rax, r11 # All 64 bits
+    pop rax
+    
     # Zero all volatile registers
     xor rdi, rdi
     xor rsi, rsi
