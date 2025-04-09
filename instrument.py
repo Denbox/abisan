@@ -171,9 +171,7 @@ def get_registers_read(insn: CsInsn) -> set[int]:
                 result.add(op.mem.index)
             if op.mem.segment != 0:
                 result.add(op.mem.segment)
-    return set(
-        filter(lambda r: r not in _UNUSED_REGISTERS, result)
-    )
+    return set(filter(lambda r: r not in _UNUSED_REGISTERS, result))
 
 
 def get_registers_written(insn: CsInsn) -> set[int]:
@@ -183,107 +181,108 @@ def get_registers_written(insn: CsInsn) -> set[int]:
         if op.type == capstone.CS_OP_REG and op.access & capstone.CS_AC_WRITE:
             result.add(op.reg)
 
-    return set(
-        filter(lambda r: r not in _UNUSED_REGISTERS, result)
-    )
+    return set(filter(lambda r: r not in _UNUSED_REGISTERS, result))
+
 
 # bitwise negation of 8bit int
 def bitwise_neg8(i: int) -> int:
     return int("".join("1" if bit == "0" else "0" for bit in bin(i)[2:].zfill(8)), 2)
 
+
 def get_taint_mask(r: int) -> int:
     match r:
         case (  # 64 bit regs
-                x86_const.X86_REG_RAX
-                | x86_const.X86_REG_RBX
-                | x86_const.X86_REG_RCX
-                | x86_const.X86_REG_RDX
-                | x86_const.X86_REG_RSI
-                | x86_const.X86_REG_RDI
-                | x86_const.X86_REG_RBP
-                | x86_const.X86_REG_RSP
-                | x86_const.X86_REG_R8
-                | x86_const.X86_REG_R9
-                | x86_const.X86_REG_R10
-                | x86_const.X86_REG_R11
-                | x86_const.X86_REG_R12
-                | x86_const.X86_REG_R13
-                | x86_const.X86_REG_R14
-                | x86_const.X86_REG_R15
-                | x86_const.X86_REG_RIP
-                | x86_const.X86_REG_EFLAGS
+            x86_const.X86_REG_RAX
+            | x86_const.X86_REG_RBX
+            | x86_const.X86_REG_RCX
+            | x86_const.X86_REG_RDX
+            | x86_const.X86_REG_RSI
+            | x86_const.X86_REG_RDI
+            | x86_const.X86_REG_RBP
+            | x86_const.X86_REG_RSP
+            | x86_const.X86_REG_R8
+            | x86_const.X86_REG_R9
+            | x86_const.X86_REG_R10
+            | x86_const.X86_REG_R11
+            | x86_const.X86_REG_R12
+            | x86_const.X86_REG_R13
+            | x86_const.X86_REG_R14
+            | x86_const.X86_REG_R15
+            | x86_const.X86_REG_RIP
+            | x86_const.X86_REG_EFLAGS
         ):
-            return 0xff
+            return 0xFF
         case (  # 32 bit regs
-                x86_const.X86_REG_EAX
-                | x86_const.X86_REG_EBX
-                | x86_const.X86_REG_ECX
-                | x86_const.X86_REG_EDX
-                | x86_const.X86_REG_ESI
-                | x86_const.X86_REG_EDI
-                | x86_const.X86_REG_EBP
-                | x86_const.X86_REG_ESP
-                | x86_const.X86_REG_R8D
-                | x86_const.X86_REG_R9D
-                | x86_const.X86_REG_R10D
-                | x86_const.X86_REG_R11D
-                | x86_const.X86_REG_R12D
-                | x86_const.X86_REG_R13D
-                | x86_const.X86_REG_R14D
-                | x86_const.X86_REG_R15D
-                | x86_const.X86_REG_EIP
+            x86_const.X86_REG_EAX
+            | x86_const.X86_REG_EBX
+            | x86_const.X86_REG_ECX
+            | x86_const.X86_REG_EDX
+            | x86_const.X86_REG_ESI
+            | x86_const.X86_REG_EDI
+            | x86_const.X86_REG_EBP
+            | x86_const.X86_REG_ESP
+            | x86_const.X86_REG_R8D
+            | x86_const.X86_REG_R9D
+            | x86_const.X86_REG_R10D
+            | x86_const.X86_REG_R11D
+            | x86_const.X86_REG_R12D
+            | x86_const.X86_REG_R13D
+            | x86_const.X86_REG_R14D
+            | x86_const.X86_REG_R15D
+            | x86_const.X86_REG_EIP
         ):
-            return 0x0f
-        case ( # 16 bit regs
-                x86_const.X86_REG_AX
-                | x86_const.X86_REG_BX
-                | x86_const.X86_REG_CX
-                | x86_const.X86_REG_DX
-                | x86_const.X86_REG_SI
-                | x86_const.X86_REG_DI
-                | x86_const.X86_REG_BP
-                | x86_const.X86_REG_SP
-                | x86_const.X86_REG_R8W
-                | x86_const.X86_REG_R9W
-                | x86_const.X86_REG_R10W
-                | x86_const.X86_REG_R11W
-                | x86_const.X86_REG_R12W
-                | x86_const.X86_REG_R13W
-                | x86_const.X86_REG_R14W
-                | x86_const.X86_REG_R15W
-                | x86_const.X86_REG_IP
+            return 0x0F
+        case (  # 16 bit regs
+            x86_const.X86_REG_AX
+            | x86_const.X86_REG_BX
+            | x86_const.X86_REG_CX
+            | x86_const.X86_REG_DX
+            | x86_const.X86_REG_SI
+            | x86_const.X86_REG_DI
+            | x86_const.X86_REG_BP
+            | x86_const.X86_REG_SP
+            | x86_const.X86_REG_R8W
+            | x86_const.X86_REG_R9W
+            | x86_const.X86_REG_R10W
+            | x86_const.X86_REG_R11W
+            | x86_const.X86_REG_R12W
+            | x86_const.X86_REG_R13W
+            | x86_const.X86_REG_R14W
+            | x86_const.X86_REG_R15W
+            | x86_const.X86_REG_IP
         ):
             return 0x03
-        case ( # high 8 bit regs
-                x86_const.X86_REG_AH
-                | x86_const.X86_REG_BH
-                | x86_const.X86_REG_CH
-                | x86_const.X86_REG_DH
+        case (  # high 8 bit regs
+            x86_const.X86_REG_AH
+            | x86_const.X86_REG_BH
+            | x86_const.X86_REG_CH
+            | x86_const.X86_REG_DH
         ):
             return 0x02
-        case ( # low 8 bit regs
-                x86_const.X86_REG_AL
-                | x86_const.X86_REG_BL
-                | x86_const.X86_REG_CL
-                | x86_const.X86_REG_DL
-                | x86_const.X86_REG_SIL
-                | x86_const.X86_REG_DIL
-                | x86_const.X86_REG_BPL
-                | x86_const.X86_REG_SPL
-                | x86_const.X86_REG_R8B
-                | x86_const.X86_REG_R9B
-                | x86_const.X86_REG_R10B
-                | x86_const.X86_REG_R11B
-                | x86_const.X86_REG_R12B
-                | x86_const.X86_REG_R13B
-                | x86_const.X86_REG_R14B
-                | x86_const.X86_REG_R15B
+        case (  # low 8 bit regs
+            x86_const.X86_REG_AL
+            | x86_const.X86_REG_BL
+            | x86_const.X86_REG_CL
+            | x86_const.X86_REG_DL
+            | x86_const.X86_REG_SIL
+            | x86_const.X86_REG_DIL
+            | x86_const.X86_REG_BPL
+            | x86_const.X86_REG_SPL
+            | x86_const.X86_REG_R8B
+            | x86_const.X86_REG_R9B
+            | x86_const.X86_REG_R10B
+            | x86_const.X86_REG_R11B
+            | x86_const.X86_REG_R12B
+            | x86_const.X86_REG_R13B
+            | x86_const.X86_REG_R14B
+            | x86_const.X86_REG_R15B
         ):
             return 0x01
-        
+
     print("Unsupported register {cs.reg_name(r)}", file=sys.stderr)
     sys.exit(1)
-    
+
+
 def register_normalize(r: int) -> int:
     match r:
         case (
@@ -594,8 +593,12 @@ def generate_generic_reg_taint_update(r: int) -> bytes:
         b"\n".join(
             (
                 b"    push rax",
-                f"    lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(register_normalize(r))}]".encode("ascii"),
-                f"    and byte ptr [rax], {bitwise_neg8(get_taint_mask(r))}".encode("ascii"),
+                f"    lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(register_normalize(r))}]".encode(
+                    "ascii"
+                ),
+                f"    and byte ptr [rax], {bitwise_neg8(get_taint_mask(r))}".encode(
+                    "ascii"
+                ),
                 b"    pop rax",
             )
         )
@@ -618,7 +621,7 @@ def generate_cmov_reg_taint_update(line: bytes, insn: CsInsn, r: int) -> bytes:
                 b"    mov cl, bl",
                 f"    and cl, {bitwise_neg8(get_taint_mask(r))}".encode("ascii"),
                 b"    " + insn.mnemonic.encode("ascii") + b" rbx, rcx",
-                b"    mov byte ptr [rax], bl", # TODO: UPDATE FOR MASKS
+                b"    mov byte ptr [rax], bl",
                 b"    popfq",
                 b"    pop rcx",
                 b"    pop rbx",
@@ -636,9 +639,13 @@ def generate_taint_after_call() -> bytes:
             (
                 b"    push rdi",
                 b"    lea rdi, byte ptr offset abisan_taint_state[rip]",
-                f"    mov byte ptr [rdi + {TAINT_STATE_RAX}], 0".encode("ascii"),  # TODO: This should be tainted for void functions
+                f"    mov byte ptr [rdi + {TAINT_STATE_RAX}], 0".encode(
+                    "ascii"
+                ),  # TODO: This should be tainted for void functions
                 f"    mov byte ptr [rdi + {TAINT_STATE_RCX}], 0xff".encode("ascii"),
-                f"    mov byte ptr [rdi + {TAINT_STATE_RDX}], 0xff".encode("ascii"),  # TODO: This shouldn't be tainted for functions that return in rdx:rax
+                f"    mov byte ptr [rdi + {TAINT_STATE_RDX}], 0xff".encode(
+                    "ascii"
+                ),  # TODO: This shouldn't be tainted for functions that return in rdx:rax
                 f"    mov byte ptr [rdi + {TAINT_STATE_RDI}], 0xff".encode("ascii"),
                 f"    mov byte ptr [rdi + {TAINT_STATE_RSI}], 0xff".encode("ascii"),
                 f"    mov byte ptr [rdi + {TAINT_STATE_R8}], 0xff".encode("ascii"),
