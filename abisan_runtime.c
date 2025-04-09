@@ -167,19 +167,100 @@ abisan_fail_taint_rax(void) {
 }
 
 [[noreturn]] void
+abisan_fail_taint_eax(void) {
+    abisan_fail_taint("eax");
+}
+
+[[noreturn]] void
+abisan_fail_taint_ax(void) {
+    abisan_fail_taint("ax");
+}
+
+[[noreturn]] void
+abisan_fail_taint_ah(void) {
+    abisan_fail_taint("ah");
+}
+
+[[noreturn]] void
+abisan_fail_taint_al(void) {
+    abisan_fail_taint("al");
+}
+/**********************************/
+[[noreturn]] void
 abisan_fail_taint_rbx(void) {
     abisan_fail_taint("rbx");
 }
 
+[[noreturn]] void
+abisan_fail_taint_ebx(void) {
+    abisan_fail_taint("ebx");
+}
+
+[[noreturn]] void
+abisan_fail_taint_bx(void) {
+    abisan_fail_taint("bx");
+}
+
+[[noreturn]] void
+abisan_fail_taint_bh(void) {
+    abisan_fail_taint("bh");
+}
+
+[[noreturn]] void
+abisan_fail_taint_bl(void) {
+    abisan_fail_taint("bl");
+}
+/**********************************/
 [[noreturn]] void
 abisan_fail_taint_rcx(void) {
     abisan_fail_taint("rcx");
 }
 
 [[noreturn]] void
+abisan_fail_taint_ecx(void) {
+    abisan_fail_taint("ecx");
+}
+
+[[noreturn]] void
+abisan_fail_taint_cx(void) {
+    abisan_fail_taint("cx");
+}
+
+[[noreturn]] void
+abisan_fail_taint_ch(void) {
+    abisan_fail_taint("ch");
+}
+
+[[noreturn]] void
+abisan_fail_taint_cl(void) {
+    abisan_fail_taint("cl");
+}
+/**********************************/
+[[noreturn]] void
 abisan_fail_taint_rdx(void) {
     abisan_fail_taint("rdx");
 }
+
+[[noreturn]] void
+abisan_fail_taint_edx(void) {
+    abisan_fail_taint("edx");
+}
+
+[[noreturn]] void
+abisan_fail_taint_dx(void) {
+    abisan_fail_taint("dx");
+}
+
+[[noreturn]] void
+abisan_fail_taint_dh(void) {
+    abisan_fail_taint("dh");
+}
+
+[[noreturn]] void
+abisan_fail_taint_dl(void) {
+    abisan_fail_taint("dl");
+}
+/**********************************/
 
 [[noreturn]] void
 abisan_fail_taint_rdi(void) {
@@ -187,9 +268,41 @@ abisan_fail_taint_rdi(void) {
 }
 
 [[noreturn]] void
+abisan_fail_taint_edi(void) {
+    abisan_fail_taint("edi");
+}
+
+[[noreturn]] void
+abisan_fail_taint_di(void) {
+    abisan_fail_taint("di");
+}
+
+[[noreturn]] void
+abisan_fail_taint_dil(void) {
+    abisan_fail_taint("dil");
+}
+/**********************************/
+
+[[noreturn]] void
 abisan_fail_taint_rsi(void) {
     abisan_fail_taint("rsi");
 }
+
+[[noreturn]] void
+abisan_fail_taint_esi(void) {
+    abisan_fail_taint("esi");
+}
+
+[[noreturn]] void
+abisan_fail_taint_si(void) {
+    abisan_fail_taint("si");
+}
+
+[[noreturn]] void
+abisan_fail_taint_sil(void) {
+    abisan_fail_taint("sil");
+}
+/**********************************/
 
 [[noreturn]] void
 abisan_fail_taint_r8(void) {
@@ -197,9 +310,41 @@ abisan_fail_taint_r8(void) {
 }
 
 [[noreturn]] void
+abisan_fail_taint_r8d(void) {
+    abisan_fail_taint("r8d");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r8w(void) {
+    abisan_fail_taint("r8w");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r8b(void) {
+    abisan_fail_taint("r8b");
+}
+/**********************************/
+
+[[noreturn]] void
 abisan_fail_taint_r9(void) {
     abisan_fail_taint("r9");
 }
+
+[[noreturn]] void
+abisan_fail_taint_r9d(void) {
+    abisan_fail_taint("r9d");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r9w(void) {
+    abisan_fail_taint("r9w");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r9b(void) {
+    abisan_fail_taint("r9b");
+}
+/**********************************/
 
 [[noreturn]] void
 abisan_fail_taint_r10(void) {
@@ -207,9 +352,41 @@ abisan_fail_taint_r10(void) {
 }
 
 [[noreturn]] void
+abisan_fail_taint_r10d(void) {
+    abisan_fail_taint("r10d");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r10w(void) {
+    abisan_fail_taint("r10w");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r10b(void) {
+    abisan_fail_taint("r10b");
+}
+/**********************************/
+
+[[noreturn]] void
 abisan_fail_taint_r11(void) {
     abisan_fail_taint("r11");
 }
+
+[[noreturn]] void
+abisan_fail_taint_r11d(void) {
+    abisan_fail_taint("r11d");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r11w(void) {
+    abisan_fail_taint("r11w");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r11b(void) {
+    abisan_fail_taint("r11b");
+}
+/**********************************/
 
 [[noreturn]] void
 abisan_fail_taint_r12(void) {
@@ -217,9 +394,41 @@ abisan_fail_taint_r12(void) {
 }
 
 [[noreturn]] void
+abisan_fail_taint_r12d(void) {
+    abisan_fail_taint("r12d");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r12w(void) {
+    abisan_fail_taint("r12w");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r12b(void) {
+    abisan_fail_taint("r12b");
+}
+/**********************************/
+
+[[noreturn]] void
 abisan_fail_taint_r13(void) {
     abisan_fail_taint("r13");
 }
+
+[[noreturn]] void
+abisan_fail_taint_r13d(void) {
+    abisan_fail_taint("r13d");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r13w(void) {
+    abisan_fail_taint("r13w");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r13b(void) {
+    abisan_fail_taint("r13b");
+}
+/**********************************/
 
 [[noreturn]] void
 abisan_fail_taint_r14(void) {
@@ -227,14 +436,62 @@ abisan_fail_taint_r14(void) {
 }
 
 [[noreturn]] void
+abisan_fail_taint_r14d(void) {
+    abisan_fail_taint("r14d");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r14w(void) {
+    abisan_fail_taint("r14w");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r14b(void) {
+    abisan_fail_taint("r14b");
+}
+/**********************************/
+
+[[noreturn]] void
 abisan_fail_taint_r15(void) {
     abisan_fail_taint("r15");
 }
 
 [[noreturn]] void
+abisan_fail_taint_r15d(void) {
+    abisan_fail_taint("r15d");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r15w(void) {
+    abisan_fail_taint("r15w");
+}
+
+[[noreturn]] void
+abisan_fail_taint_r15b(void) {
+    abisan_fail_taint("r15b");
+}
+/**********************************/
+
+[[noreturn]] void
 abisan_fail_taint_rbp(void) {
     abisan_fail_taint("rbp");
 }
+
+[[noreturn]] void
+abisan_fail_taint_ebp(void) {
+    abisan_fail_taint("ebp");
+}
+
+[[noreturn]] void
+abisan_fail_taint_bp(void) {
+    abisan_fail_taint("bp");
+}
+
+[[noreturn]] void
+abisan_fail_taint_bpl(void) {
+    abisan_fail_taint("bpl");
+}
+/**********************************/
 
 [[noreturn]] void
 abisan_fail_taint_rflags(void) {
