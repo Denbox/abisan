@@ -534,6 +534,8 @@ def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int, config: Config) 
         #     destination is not in stack
         # Then call the fail taint check func
 
+        #TODO: Support cmov?
+
         return (
             b"\n".join(
                 (
