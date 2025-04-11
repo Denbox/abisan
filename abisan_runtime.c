@@ -178,7 +178,6 @@ abisan_fail_mxcsr(struct abisan_shadow_stack_frame const *const frame,
 [[noreturn]] void abisan_fail_taint_al(void) {
     abisan_fail_taint("al");
 }
-/**********************************/
 [[noreturn]] void abisan_fail_taint_rbx(void) {
     abisan_fail_taint("rbx");
 }
@@ -198,7 +197,6 @@ abisan_fail_mxcsr(struct abisan_shadow_stack_frame const *const frame,
 [[noreturn]] void abisan_fail_taint_bl(void) {
     abisan_fail_taint("bl");
 }
-/**********************************/
 [[noreturn]] void abisan_fail_taint_rcx(void) {
     abisan_fail_taint("rcx");
 }
@@ -218,7 +216,6 @@ abisan_fail_mxcsr(struct abisan_shadow_stack_frame const *const frame,
 [[noreturn]] void abisan_fail_taint_cl(void) {
     abisan_fail_taint("cl");
 }
-/**********************************/
 [[noreturn]] void abisan_fail_taint_rdx(void) {
     abisan_fail_taint("rdx");
 }
@@ -238,7 +235,6 @@ abisan_fail_mxcsr(struct abisan_shadow_stack_frame const *const frame,
 [[noreturn]] void abisan_fail_taint_dl(void) {
     abisan_fail_taint("dl");
 }
-/**********************************/
 
 [[noreturn]] void abisan_fail_taint_rdi(void) {
     abisan_fail_taint("rdi");
@@ -255,7 +251,6 @@ abisan_fail_mxcsr(struct abisan_shadow_stack_frame const *const frame,
 [[noreturn]] void abisan_fail_taint_dil(void) {
     abisan_fail_taint("dil");
 }
-/**********************************/
 
 [[noreturn]] void abisan_fail_taint_rsi(void) {
     abisan_fail_taint("rsi");
@@ -272,7 +267,6 @@ abisan_fail_mxcsr(struct abisan_shadow_stack_frame const *const frame,
 [[noreturn]] void abisan_fail_taint_sil(void) {
     abisan_fail_taint("sil");
 }
-/**********************************/
 
 [[noreturn]] void abisan_fail_taint_r8(void) {
     abisan_fail_taint("r8");
@@ -289,7 +283,6 @@ abisan_fail_mxcsr(struct abisan_shadow_stack_frame const *const frame,
 [[noreturn]] void abisan_fail_taint_r8b(void) {
     abisan_fail_taint("r8b");
 }
-/**********************************/
 
 [[noreturn]] void abisan_fail_taint_r9(void) {
     abisan_fail_taint("r9");
@@ -306,7 +299,6 @@ abisan_fail_mxcsr(struct abisan_shadow_stack_frame const *const frame,
 [[noreturn]] void abisan_fail_taint_r9b(void) {
     abisan_fail_taint("r9b");
 }
-/**********************************/
 
 [[noreturn]] void abisan_fail_taint_r10(void) {
     abisan_fail_taint("r10");
@@ -323,7 +315,6 @@ abisan_fail_mxcsr(struct abisan_shadow_stack_frame const *const frame,
 [[noreturn]] void abisan_fail_taint_r10b(void) {
     abisan_fail_taint("r10b");
 }
-/**********************************/
 
 [[noreturn]] void abisan_fail_taint_r11(void) {
     abisan_fail_taint("r11");
@@ -340,7 +331,6 @@ abisan_fail_mxcsr(struct abisan_shadow_stack_frame const *const frame,
 [[noreturn]] void abisan_fail_taint_r11b(void) {
     abisan_fail_taint("r11b");
 }
-/**********************************/
 
 [[noreturn]] void abisan_fail_taint_r12(void) {
     abisan_fail_taint("r12");
@@ -357,7 +347,6 @@ abisan_fail_mxcsr(struct abisan_shadow_stack_frame const *const frame,
 [[noreturn]] void abisan_fail_taint_r12b(void) {
     abisan_fail_taint("r12b");
 }
-/**********************************/
 
 [[noreturn]] void abisan_fail_taint_r13(void) {
     abisan_fail_taint("r13");
@@ -374,7 +363,6 @@ abisan_fail_mxcsr(struct abisan_shadow_stack_frame const *const frame,
 [[noreturn]] void abisan_fail_taint_r13b(void) {
     abisan_fail_taint("r13b");
 }
-/**********************************/
 
 [[noreturn]] void abisan_fail_taint_r14(void) {
     abisan_fail_taint("r14");
@@ -391,7 +379,6 @@ abisan_fail_mxcsr(struct abisan_shadow_stack_frame const *const frame,
 [[noreturn]] void abisan_fail_taint_r14b(void) {
     abisan_fail_taint("r14b");
 }
-/**********************************/
 
 [[noreturn]] void abisan_fail_taint_r15(void) {
     abisan_fail_taint("r15");
@@ -408,7 +395,6 @@ abisan_fail_mxcsr(struct abisan_shadow_stack_frame const *const frame,
 [[noreturn]] void abisan_fail_taint_r15b(void) {
     abisan_fail_taint("r15b");
 }
-/**********************************/
 
 [[noreturn]] void abisan_fail_taint_rbp(void) {
     abisan_fail_taint("rbp");
@@ -425,7 +411,6 @@ abisan_fail_mxcsr(struct abisan_shadow_stack_frame const *const frame,
 [[noreturn]] void abisan_fail_taint_bpl(void) {
     abisan_fail_taint("bpl");
 }
-/**********************************/
 
 [[noreturn]] void abisan_fail_taint_rflags(void) {
     abisan_fail_taint("eflags");
