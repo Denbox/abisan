@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from enum import Enum
 
+from typing import Optional
+
 import capstone  # type: ignore
 from capstone import Cs, x86_const
 
@@ -74,11 +76,12 @@ class EAWidth(Enum):
 
 @dataclass
 class EffectiveAddress:
-    width: EAWidth | None
-    base: Register | None
-    index: Register | None
-    scale: Immediate | None
-    displacement: Immediate | None
+    width: Optional[EAWidth] = None
+    base: Optional[Register] = None
+    index: Optional[Register] = None
+    scale: Optional[Immediate] = None
+    displacement: Optional[Immediate] = None
+    offset: Optional[Label] = None
 
 @dataclass
 class JumpTarget:
@@ -90,6 +93,9 @@ def handle_EA_att(op: EffectiveAddress, isJumpTarget: bool) -> tuple[bytes, byte
 
     if op.displacement is not None:
         instr += op.displacement.val
+
+        if isinstance(op.offset,Label):
+            instr += b"+" + op.offset.val
 
         instr += b"("
         needs_comma = False
@@ -112,29 +118,32 @@ def handle_EA_intel(op: EffectiveAddress) -> bytes:
     if op.width is not None:
         instr += op.width.serialize_intel()
 
-        instr += b" ["
-        needs_plus = False
+    if isinstance(op.offset,Label):
+        instr += b"offset " + op.offset.val
 
-        if op.base is not None:
-            instr += op.base.val
+    instr += b" ["
+    needs_plus = False
 
-            needs_plus = True
+    if op.base is not None:
+        instr += op.base.val
 
-            if op.scale is not None and op.index is not None:
-                if needs_plus:
-                    instr += b" + "
+        needs_plus = True
 
-                instr += op.index.val + b" * " + op.scale.val
+    if op.scale is not None and op.index is not None:
+        if needs_plus:
+            instr += b" + "
 
-                needs_plus = True
+        instr += op.index.val + b" * " + op.scale.val
 
-            if op.displacement is not None:
-                if needs_plus:
-                    instr += b" + "
+        needs_plus = True
 
-                instr += op.displacement.val
+    if op.displacement is not None:
+        if needs_plus:
+            instr += b" + "
 
-            instr += b"]"
+        instr += op.displacement.val
+
+    instr += b"]"
     return instr
 
 

@@ -3,6 +3,8 @@ import subprocess
 import sys
 import re
 
+from instruction import Instruction, Register, EffectiveAddress, Immediate, EAWidth, Label
+
 import capstone  # type: ignore
 from capstone import Cs, CsInsn, x86_const
 from elftools.elf.elffile import ELFFile
@@ -32,6 +34,7 @@ TAINT_STATE_RBP: int = 14
 TAINT_STATE_EFLAGS: int = 15
 
 REDZONE_SIZE: int = 0x80
+
 
 
 @dataclasses.dataclass
@@ -591,6 +594,23 @@ def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int, config: Config) 
 
 def generate_generic_reg_taint_update(r: int) -> bytes:
     # print("Update | Taint mask:", hex(get_taint_mask(r)), " for ", cs.reg_name(r), "\n Bitwise negated Taint Mask:", bin(bitwise_neg8(get_taint_mask(r))))
+    return (
+        b"\n".join(
+            (
+                Instruction(b"push",[Register(b"rax")]).serialize_intel(),
+                Instruction(b"lea",[Register(b"rax"),EffectiveAddress(
+                    offset=Label(b"abisan_taint_state"),
+                    base=Register(b"rip"),
+                    displacement=Immediate(str(cs_to_taint_idx(register_normalize(r))).encode("ascii")))]).serialize_intel(),
+                Instruction(b"and",[EffectiveAddress(
+                    width=EAWidth.BYTE_PTR,
+                    base=Register(b"rax")
+                ), Immediate(str(bitwise_neg8(get_taint_mask(r))).encode("ascii"))]).serialize_intel(),
+                Instruction(b"pop",[Register(b"rax")]).serialize_intel()
+            )
+        )
+        + b"\n"
+    )
     return (
         b"\n".join(
             (
