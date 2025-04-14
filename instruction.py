@@ -15,6 +15,7 @@ cs.detail = True
 # Instruction(b"mov",[Register(b"r11"),Immediate(b"0x10")]).serialize_intel() == "     mov r11, 0x10"
 # Instruction(b"mov",[Register(b"r11"),Immediate(b"0x10")]).serialize_att() ==   "     mov $0x10, %r11"
 
+
 @dataclass
 class Register:
     val: bytes
@@ -83,6 +84,7 @@ class EffectiveAddress:
     displacement: Optional[Immediate] = None
     offset: Optional[Label] = None
 
+
 @dataclass
 class JumpTarget:
     target: EffectiveAddress | Label | Register | Immediate
@@ -94,7 +96,7 @@ def handle_EA_att(op: EffectiveAddress, isJumpTarget: bool) -> tuple[bytes, byte
     if op.displacement is not None:
         instr += op.displacement.val
 
-        if isinstance(op.offset,Label):
+        if isinstance(op.offset, Label):
             instr += b"+" + op.offset.val
 
         instr += b"("
@@ -118,7 +120,7 @@ def handle_EA_intel(op: EffectiveAddress) -> bytes:
     if op.width is not None:
         instr += op.width.serialize_intel()
 
-    if isinstance(op.offset,Label):
+    if isinstance(op.offset, Label):
         instr += b"offset " + op.offset.val
 
     instr += b" ["
@@ -161,11 +163,11 @@ class Instruction:
     def serialize_att(self) -> bytes:
         instr = b""
         mnem = b"     " + self.mnemonic + b" "
-        
-        for i in range(len(self.operands),0,-1): # Loop starting at last element
-           
+
+        for i in range(len(self.operands), 0, -1):  # Loop starting at last element
+
             # Assumes operands are provided in destination, source order
-            op = self.operands[i-1]
+            op = self.operands[i - 1]
 
             if isinstance(op, Register):
                 instr += b"%" + op.val
@@ -173,7 +175,7 @@ class Instruction:
                 instr += b"$" + op.val
             elif isinstance(op, Label):
                 instr += op.val
-                
+
             elif isinstance(op, JumpTarget):
                 if isinstance(op.target, Immediate) or isinstance(op.target, Label):
                     instr += op.target.val
@@ -181,7 +183,7 @@ class Instruction:
                     instr += b"*%" + op.target.val
                 if isinstance(op.target, EffectiveAddress):
                     instr += handle_EA_att(op.target, isJumpTarget=True)[1]
-                    
+
             else:  # is EffectiveAddress
                 EA = handle_EA_att(op, isJumpTarget=False)
                 instr += EA[1]
@@ -192,7 +194,6 @@ class Instruction:
 
         return mnem + instr
 
-    
     def serialize_intel(self) -> bytes:
         instr = b"     " + self.mnemonic + b" "
 
@@ -205,10 +206,10 @@ class Instruction:
                 else:
                     instr += op.target.val
 
-            elif isinstance(op,EffectiveAddress):
+            elif isinstance(op, EffectiveAddress):
                 instr += handle_EA_intel(op)
-            else: # Is register or immediate
-                instr += op.val   
+            else:  # Is register or immediate
+                instr += op.val
 
             if i < len(self.operands) - 1:
                 instr += b", "
