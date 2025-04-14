@@ -3,7 +3,7 @@ import subprocess
 import sys
 import re
 
-from instruction import Instruction, Register, EffectiveAddress, Immediate, EAWidth, Label
+from instruction import Instruction, Register, EffectiveAddress, Immediate, EAWidth, Label, JumpTarget
 
 import capstone  # type: ignore
 from capstone import Cs, CsInsn, x86_const
@@ -526,8 +526,8 @@ def generate_generic_memory_instrumentation(line: bytes, config: Config) -> byte
 
 
 def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int, config: Config) -> bytes:
+    instructions: list[Instruction] = None
 
-    # print("Check | Taint mask:", hex(get_taint_mask(r)), " for ", cs.reg_name(r))
     if insn.op_count(capstone.CS_OP_MEM) > 0 and insn.mnemonic == "mov":
         # r is source &&
         # A memory operand exists, so it must be the destination
@@ -538,97 +538,75 @@ def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int, config: Config) 
         # Then call the fail taint check func
 
         #TODO: Support cmov?
-
-        return (
-            b"\n".join(
-                (
-                    b"    pushfq",
-                    b"    push rax",
-                    b"    push rbx",
-                    b"    lea rbx, " + get_memory_operand(line),
-                    b"    " + insn.mnemonic.encode("ascii") + b" rax, rbx",
-                    (
-                        (b"    add rbx, " + hex(REDZONE_SIZE).encode("ascii"))
-                        if config.redzone_enabled
-                        else b""
-                    ),
-                    b"    cmp rbx, rsp",
-                    b"    setb bl",
-                    f"    lea rax , offset abisan_taint_state[rip + {cs_to_taint_idx(register_normalize(r))}]".encode(
-                        "ascii"
-                    ),
-                    b"    mov al, byte ptr [rax]",
-                    f"    and al, {get_taint_mask(r)}".encode("ascii"),
-                    b"    cmp al, 0",
-                    b"    setne bh",
-                    b"    add bl, bh",
-                    b"    cmp bl, 2",
-                    f"    je abisan_fail_taint_{cs.reg_name(r)}".encode("ascii"),
-                    b"    pop rbx",
-                    b"    pop rax",
-                    b"    popfq",
-                )
-            )
-            + b"\n"
-        )
-
-    return (
-        b"\n".join(
+        instructions = [
+            Instruction(b"pushfq",[]),
+            Instruction(b"push",[Register(b"rax")]),
+            Instruction(b"push",[Register(b"rbx")]),
+            Instruction(b"lea",[Register(b"rbx"),Label(get_memory_operand(line))]),  # TODO:  convert get_memory_operand to EffectiveAddress
+            Instruction(insn.mnemonic.encode("ascii"),[Register(b"rax"),Register(b"rbx")]),
             (
-                b"    pushfq",
-                b"    push rax",
-                f"    lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(register_normalize(r))}]".encode(
-                    "ascii"
-                ),
-                b"    mov al, byte ptr [rax]",
-                f"    and al, {get_taint_mask(r)}".encode("ascii"),
-                b"    cmp al, 0",
-                f"    jne abisan_fail_taint_{cs.reg_name(r)}".encode("ascii"),
-                b"    pop rax",
-                b"    popfq",
-            )
-        )
-        + b"\n"
-    )
+                Instruction(b"add",[Immediate(hex(REDZONE_SIZE).encode("ascii"))]) if config.redzone_enabled else Instruction(b"nop",[])
+            ),
+            Instruction(b"cmp", [Register(b"rbx"),Register(b"rsp")]),
+            Instruction(b"setb",[Register(b"bl")]),
+            Instruction(b"lea",[Register(b"rax"),EffectiveAddress(
+                offset=Label(b"abisan_taint_state"),
+                base=Register(b"rip"),
+                displacement=Immediate(str(cs_to_taint_idx(register_normalize(r))).encode("ascii"))
+            )]),
+            Instruction(b"mov",[Register(b"al"), EffectiveAddress(width=EAWidth.BYTE_PTR,base=Register(b"rax"))]),
+            Instruction(b"and",[Register(b"al"),Immediate(hex(get_taint_mask(r)).encode("ascii"))]),
+            Instruction(b"cmp",[Register(b"al"),Immediate(b"0")]),
+            Instruction(b"setne",[Register(b"bh")]),
+            Instruction(b"add",[Register(b"bl"),Register(b"bh")]),
+            Instruction(b"cmp",[Register(b"bl"),Immediate(b"2")]),
+            Instruction(b"je",[JumpTarget(Label(b"abisan_fail_taint_" + cs.reg_name(r).encode("ascii")))]),
+            Instruction(b"pop",[Register(b"rbx")]),
+            Instruction(b"pop",[Register(b"rax")]),
+            Instruction(b"popfq",[])
+        ]
+    else:
+        instructions=[
+            Instruction(b"pushfq",[]),
+            Instruction(b"push",[Register(b"rax")]),
+            Instruction(b"lea",[Register(b"rax"),EffectiveAddress(
+                offset=Label(b"abisan_taint_state"),
+                base=Register(b"rip"),
+                displacement=Immediate(str(cs_to_taint_idx(register_normalize(r))).encode("ascii"))
+            )]),
+            Instruction(b"mov",[Register(b"al"), EffectiveAddress(width=EAWidth.BYTE_PTR,base=Register(b"rax"))]),
+            Instruction(b"and",[Register(b"al"),Immediate(hex(get_taint_mask(r)).encode("ascii"))]),
+            Instruction(b"cmp",[Register(b"al"),Immediate(b"0")]),
+            Instruction(b"jne",[JumpTarget(Label(b"abisan_fail_taint_" + cs.reg_name(r).encode("ascii")))]),
+            Instruction(b"pop",[Register(b"rax")]),
+            Instruction(b"popfq",[])
+        ]
+    
+    serialized = map(lambda i: i.serialize_intel(),instructions)
+    return b"\n".join(serialized) + b"\n"
 
 
 def generate_generic_reg_taint_update(r: int) -> bytes:
-    # print("Update | Taint mask:", hex(get_taint_mask(r)), " for ", cs.reg_name(r), "\n Bitwise negated Taint Mask:", bin(bitwise_neg8(get_taint_mask(r))))
-    return (
-        b"\n".join(
-            (
-                Instruction(b"push",[Register(b"rax")]).serialize_intel(),
+    instructions: list[Instruction]= [
+        
+                Instruction(b"push",[Register(b"rax")]),
                 Instruction(b"lea",[Register(b"rax"),EffectiveAddress(
                     offset=Label(b"abisan_taint_state"),
                     base=Register(b"rip"),
-                    displacement=Immediate(str(cs_to_taint_idx(register_normalize(r))).encode("ascii")))]).serialize_intel(),
+                    displacement=Immediate(str(cs_to_taint_idx(register_normalize(r))).encode("ascii")))]),
                 Instruction(b"and",[EffectiveAddress(
                     width=EAWidth.BYTE_PTR,
                     base=Register(b"rax")
-                ), Immediate(str(bitwise_neg8(get_taint_mask(r))).encode("ascii"))]).serialize_intel(),
-                Instruction(b"pop",[Register(b"rax")]).serialize_intel()
-            )
-        )
-        + b"\n"
-    )
-    return (
-        b"\n".join(
-            (
-                b"    push rax",
-                f"    lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(register_normalize(r))}]".encode(
-                    "ascii"
-                ),
-                f"    and byte ptr [rax], {bitwise_neg8(get_taint_mask(r))}".encode(
-                    "ascii"
-                ),
-                b"    pop rax",
-            )
-        )
-        + b"\n"
-    )
-
+                ), Immediate(str(bitwise_neg8(get_taint_mask(r))).encode("ascii"))]),
+                Instruction(b"pop",[Register(b"rax")])
+    ]
+    
+    serialized = map(lambda i: i.serialize_intel(),instructions)
+    
+    return b"\n".join(serialized)+ b"\n"
 
 def generate_cmov_reg_taint_update(line: bytes, insn: CsInsn, r: int) -> bytes:
+
     return (
         b"\n".join(
             (
