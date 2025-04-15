@@ -150,7 +150,7 @@ class Instruction:
             if isinstance(op, EffectiveAddress) and op.width is not None:
                 # If an instruction has 2 EA operands, this will be intentionally wrong, and shouldn't assemble.
                 mnemonic += op.width.serialize_att()
-        return mnemonic + b" " + b", ".join(op.serialize_att() for op in self.operands)
+        return mnemonic + b" " + b", ".join(op.serialize_att() for op in reversed(self.operands))
 
     def serialize_intel(self) -> bytes:
         return (
