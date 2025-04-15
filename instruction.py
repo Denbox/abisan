@@ -1,13 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-
-from typing import Optional
-
-import capstone  # type: ignore
-from capstone import Cs, x86_const
-
-cs: Cs = Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
-cs.detail = True
+from typing import TypeGuard
 
 # Serialize Instruction instances into Intel or AT&T syntax
 # Assumes that caller will order operands for Instruction.operands in destination, source order
@@ -20,15 +13,33 @@ cs.detail = True
 class Register:
     val: bytes
 
+    def serialize_att(self) -> bytes:
+        return b"%" + self.val
+
+    def serialize_intel(self) -> bytes:
+        return self.val
+
 
 @dataclass
 class Immediate:
     val: bytes
 
+    def serialize_att(self) -> bytes:
+        return b"$" + self.val
+
+    def serialize_intel(self) -> bytes:
+        return self.val
+
 
 @dataclass
 class Label:
     val: bytes
+
+    def serialize_intel(self) -> bytes:
+        return self.val
+
+    def serialize_att(self) -> bytes:
+        return self.val
 
 
 class EAWidth(Enum):
@@ -41,177 +52,110 @@ class EAWidth(Enum):
     ZMMWORD_PTR = 6
 
     def serialize_intel(self) -> bytes:
-        if self.name == "BYTE_PTR":
-            return b"byte ptr"
-        if self.name == "WORD_PTR":
-            return b"word ptr"
-        if self.name == "DWORD_PTR":
-            return b"dword ptr"
-        if self.name == "QWORD_PTR":
-            return b"qword ptr"
-        if self.name == "XMMWORD_PTR":
-            return b"xmmword ptr"
-        if self.name == "YMMWORD_PTR":
-            return b"ymmword ptr"
-        if self.name == "ZMMWORD_PTR":
-            return b"zmmword ptr"
-        raise ValueError("This should never happen")
+        return self.name.lower().replace("_", " ").encode("ascii")
 
     def serialize_att(self) -> bytes:
-        if self.name == "BYTE_PTR":
-            return b"b"
-        if self.name == "WORD_PTR":
-            return b"w"
-        if self.name == "DWORD_PTR":
-            return b"d"
-        if self.name == "QWORD_PTR":
-            return b"q"
-        if self.name == "XMMWORD_PTR":
-            return b"x"
-        if self.name == "YMMWORD_PTR":
-            return b"y"
-        if self.name == "ZMMWORD_PTR":
-            return b"z"
-        raise ValueError("This should never happen")
+        return self.name[0].lower().encode("ascii")
 
 
 @dataclass
 class EffectiveAddress:
-    width: Optional[EAWidth] = None
-    base: Optional[Register] = None
-    index: Optional[Register] = None
-    scale: Optional[Immediate] = None
-    displacement: Optional[Immediate] = None
-    offset: Optional[Label] = None
+    width: EAWidth | None = None
+    base: Register | None = None
+    index: Register | None = None
+    scale: int | None = None
+    displacement: Immediate | None = None
+    offset: Label | None = None
+
+    def serialize_intel(self) -> bytes:
+        result: bytes = b""
+        if self.width is not None:
+            result += self.width.serialize_intel() + b" "
+        if self.offset is not None:
+            result += b"offset " + self.offset.serialize_intel()
+        result += b" ["
+        ea_components: list[bytes] = []
+        if self.base is not None:
+            ea_components.append(self.base.serialize_intel())
+        if self.index is not None and self.scale is not None:
+            ea_components.append(
+                self.index.serialize_intel() + b" * " + str(self.scale).encode("ascii")
+            )
+        if self.displacement is not None:
+            ea_components.append(self.displacement.serialize_intel())
+        result += b"+".join(ea_components)
+        result += b"]"
+        return result
+
+    def serialize_att(self) -> bytes:
+        result: bytes = b""
+        if self.displacement is not None:
+            result += self.displacement.serialize_att()
+        if self.offset is not None:
+            result += b"+" + self.offset.serialize_att()
+        ea_components: list[bytes] = []
+        if self.base is not None:
+            ea_components.append(self.base.serialize_att())
+        if self.index is not None:
+            ea_components.append(self.index.serialize_att())
+        if self.scale is not None:
+            ea_components.append(str(self.scale).encode("ascii"))
+        result += b",".join(ea_components)
+        result += b")"
+        return result
 
 
 @dataclass
 class JumpTarget:
-    target: EffectiveAddress | Label | Register | Immediate
+    val: EffectiveAddress | Label | Register | Immediate
+
+    def serialize_att(self) -> bytes:
+        if isinstance(self.val, Register) or isinstance(self.val, EffectiveAddress):
+            return b"*" + self.val.serialize_att()
+        if isinstance(self.val, Label) or isinstance(self.val, Immediate):
+            return self.val.serialize_att()
+        raise ValueError("This should never happen!")
+
+    def serialize_intel(self) -> bytes:
+        return self.val.serialize_intel()
 
 
-def handle_EA_att(op: EffectiveAddress, isJumpTarget: bool) -> tuple[bytes, bytes]:
-    instr: bytes = b"*" if isJumpTarget else b""
-
-    if op.displacement is not None:
-        instr += op.displacement.val
-
-        if isinstance(op.offset, Label):
-            instr += b"+" + op.offset.val
-
-        instr += b"("
-        needs_comma = False
-        for component in [op.base, op.index, op.scale]:
-            if component is not None:
-                if needs_comma:
-                    instr += b", "
-                instr += (
-                    b"%" + component.val
-                    if isinstance(component, Register)
-                    else component.val
-                )
-                needs_comma = True
-        instr += b")"
-    return (op.width.serialize_att() if op.width is not None else b"", instr)
-
-
-def handle_EA_intel(op: EffectiveAddress) -> bytes:
-    instr: bytes = b""
-    if op.width is not None:
-        instr += op.width.serialize_intel()
-
-    if isinstance(op.offset, Label):
-        instr += b"offset " + op.offset.val
-
-    instr += b" ["
-    needs_plus = False
-
-    if op.base is not None:
-        instr += op.base.val
-
-        needs_plus = True
-
-    if op.scale is not None and op.index is not None:
-        if needs_plus:
-            instr += b" + "
-
-        instr += op.index.val + b" * " + op.scale.val
-
-        needs_plus = True
-
-    if op.displacement is not None:
-        if needs_plus:
-            instr += b" + "
-
-        instr += op.displacement.val
-
-    instr += b"]"
-    return instr
+def is_valid_operand_list(
+    operands: list[object],
+) -> TypeGuard[list[Register | Immediate | Label | EffectiveAddress | JumpTarget]]:
+    return all(
+        any(
+            isinstance(op, t)
+            for t in (Register, Immediate, Label, EffectiveAddress, JumpTarget)
+        )
+        for op in operands
+    )
 
 
 @dataclass
 class Instruction:
     mnemonic: bytes
-    operands: list[
-        Register | Immediate | Label | EffectiveAddress
-    ]  # registers and immediates are passed as byte strings
+    operands: list[Register | Immediate | Label | EffectiveAddress | JumpTarget]
 
-    # displacement(base,index,scale)
-    # immediates (not scale) get $ in front of them, addresses do not
-    # registers get % in front of them
-    # mov source, destination
+    def __init__(self, mnemonic: bytes, *operands: object):
+        operand_list = list(operands)
+        if not is_valid_operand_list(operand_list):
+            raise ValueError("Invalid operand list!")
+        self.mnemonic = mnemonic
+        self.operands = operand_list
+
     def serialize_att(self) -> bytes:
-        instr = b""
-        mnem = b"     " + self.mnemonic + b" "
-
-        for i in range(len(self.operands), 0, -1):  # Loop starting at last element
-
-            # Assumes operands are provided in destination, source order
-            op = self.operands[i - 1]
-
-            if isinstance(op, Register):
-                instr += b"%" + op.val
-            elif isinstance(op, Immediate):
-                instr += b"$" + op.val
-            elif isinstance(op, Label):
-                instr += op.val
-
-            elif isinstance(op, JumpTarget):
-                if isinstance(op.target, Immediate) or isinstance(op.target, Label):
-                    instr += op.target.val
-                if isinstance(op.target, Register):
-                    instr += b"*%" + op.target.val
-                if isinstance(op.target, EffectiveAddress):
-                    instr += handle_EA_att(op.target, isJumpTarget=True)[1]
-
-            else:  # is EffectiveAddress
-                EA = handle_EA_att(op, isJumpTarget=False)
-                instr += EA[1]
-                mnem = b"     " + self.mnemonic + EA[0] + b" "
-
-            if i > 1:
-                instr += b", "
-
-        return mnem + instr
+        mnemonic: bytes = self.mnemonic
+        for op in self.operands:
+            if isinstance(op, EffectiveAddress) and op.width is not None:
+                # If an instruction has 2 EA operands, this will be intentionally wrong, and shouldn't assemble.
+                mnemonic += op.width.serialize_att()
+        return mnemonic + b" " + b", ".join(op.serialize_att() for op in self.operands)
 
     def serialize_intel(self) -> bytes:
-        instr = b"     " + self.mnemonic + b" "
-
-        for i in range(len(self.operands)):
-            op = self.operands[i]
-
-            if isinstance(op, JumpTarget):
-                if isinstance(op.target, EffectiveAddress):
-                    instr += handle_EA_intel(op.target)
-                else:
-                    instr += op.target.val
-
-            elif isinstance(op, EffectiveAddress):
-                instr += handle_EA_intel(op)
-            else:  # Is register or immediate
-                instr += op.val
-
-            if i < len(self.operands) - 1:
-                instr += b", "
-
-        return instr
+        return (
+            b"    "
+            + self.mnemonic
+            + b" "
+            + b", ".join(op.serialize_intel() for op in self.operands)
+        )
