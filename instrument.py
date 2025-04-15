@@ -499,6 +499,45 @@ def generate_cmov_instrumentation(line: bytes, insn: CsInsn, config: Config) -> 
 
 
 def generate_generic_memory_instrumentation(line: bytes, config: Config) -> bytes:
+    instructions: list[Instruction] = [
+        Instruction(b"pushfq"),
+        Instruction(b"push", Register(b"rax")),
+        Instruction(b"push", Register(b"rbx")),
+        Instruction(
+            b"lea", Register(b"rax"), Label(get_memory_operand(line))
+        ),  # convert get_memory_operand to EffectiveAddress
+        (
+            Instruction(
+                b"add", Register(b"rax"), Immediate(hex(REDZONE_SIZE).encode("ascii"))
+            )
+            if config.redzone_enabled
+            else Instruction(
+                b"nop",
+            )
+        ),
+        Instruction(b"cmp", Register(b"rax"), Register(b"rsp")),
+        Instruction(b"setb", Register(b"bl")),
+        Instruction(
+            b"add",
+            Register(b"rax"),
+            Immediate(
+                hex(
+                    config.stack_size - (REDZONE_SIZE if config.redzone_enabled else 0)
+                ).encode("ascii")
+            ),
+        ),
+        Instruction(b"cmp", Register(b"rax"), Register(b"rsp")),
+        Instruction(b"seta", Register(b"bh")),
+        Instruction(b"add", Register(b"bl"), Register(b"bh")),
+        Instruction(b"cmp", Register(b"bl"), Immediate(b"2")),
+        Instruction(b"je", JumpTarget(Label(b"abisan_fail_mov_below_rsp"))),
+        Instruction(b"pop", Register(b"rbx")),
+        Instruction(b"pop", Register(b"rax")),
+        Instruction(b"popfq"),
+    ]
+
+    return b"\n".join(map(Instruction.serialize_intel, instructions)) + b"\n"
+
     return (
         b"\n".join(
             (
@@ -513,10 +552,7 @@ def generate_generic_memory_instrumentation(line: bytes, config: Config) -> byte
                 ),
                 b"    cmp rax, rsp",
                 b"    setb bl",
-                b"    add rax, "
-                + hex(
-                    config.stack_size - (REDZONE_SIZE if config.redzone_enabled else 0)
-                ).encode("ascii"),
+                b"    add rax, " + hex().encode("ascii"),
                 b"    cmp rax, rsp",
                 b"    seta bh",
                 b"    add bl, bh",
@@ -531,7 +567,9 @@ def generate_generic_memory_instrumentation(line: bytes, config: Config) -> byte
     )
 
 
-def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int, config: Config) -> bytes:
+def generate_reg_taint_check(
+    line: bytes, insn: CsInsn, r: int, config: Config
+) -> bytes:
     instructions: list[Instruction] = []
 
     if insn.op_count(capstone.CS_OP_MEM) > 0 and insn.mnemonic == "mov":
@@ -553,9 +591,15 @@ def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int, config: Config) 
             Instruction(
                 b"lea", Register(b"rbx"), Label(get_memory_operand(line))
             ),  # TODO:  convert get_memory_operand to EffectiveAddress
-            Instruction(insn.mnemonic.encode("ascii"), Register(b"rax"), Register(b"rbx")),
+            Instruction(
+                insn.mnemonic.encode("ascii"), Register(b"rax"), Register(b"rbx")
+            ),
             (
-                Instruction(b"add", Immediate(hex(REDZONE_SIZE).encode("ascii")))
+                Instruction(
+                    b"add",
+                    Register(b"rbx"),
+                    Immediate(hex(REDZONE_SIZE).encode("ascii")),
+                )
                 if config.redzone_enabled
                 else Instruction(
                     b"nop",
@@ -590,7 +634,9 @@ def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int, config: Config) 
             Instruction(b"cmp", Register(b"bl"), Immediate(b"2")),
             Instruction(
                 b"je",
-                JumpTarget(Label(b"abisan_fail_taint_" + cs.reg_name(r).encode("ascii"))),
+                JumpTarget(
+                    Label(b"abisan_fail_taint_" + cs.reg_name(r).encode("ascii"))
+                ),
             ),
             Instruction(b"pop", Register(b"rbx")),
             Instruction(b"pop", Register(b"rax")),
@@ -628,7 +674,9 @@ def generate_reg_taint_check(line: bytes, insn: CsInsn, r: int, config: Config) 
             Instruction(b"cmp", Register(b"al"), Immediate(b"0")),
             Instruction(
                 b"jne",
-                JumpTarget(Label(b"abisan_fail_taint_" + cs.reg_name(r).encode("ascii"))),
+                JumpTarget(
+                    Label(b"abisan_fail_taint_" + cs.reg_name(r).encode("ascii"))
+                ),
             ),
             Instruction(b"pop", Register(b"rax")),
             Instruction(
