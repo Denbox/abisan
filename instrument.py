@@ -538,35 +538,6 @@ def generate_generic_memory_instrumentation(line: bytes, config: Config) -> byte
 
     return b"\n".join(map(Instruction.serialize_intel, instructions)) + b"\n"
 
-    return (
-        b"\n".join(
-            (
-                b"    pushfq",
-                b"    push rax",
-                b"    push rbx",
-                b"    lea rax, " + get_memory_operand(line),
-                (
-                    b"    add rax, " + hex(REDZONE_SIZE).encode("ascii")
-                    if config.redzone_enabled
-                    else b""
-                ),
-                b"    cmp rax, rsp",
-                b"    setb bl",
-                b"    add rax, " + hex().encode("ascii"),
-                b"    cmp rax, rsp",
-                b"    seta bh",
-                b"    add bl, bh",
-                b"    cmp bl, 2",
-                b"    je abisan_fail_mov_below_rsp",
-                b"    pop rbx",
-                b"    pop rax",
-                b"    popfq",
-            )
-        )
-        + b"\n"
-    )
-
-
 def generate_reg_taint_check(
     line: bytes, insn: CsInsn, r: int, config: Config
 ) -> bytes:
