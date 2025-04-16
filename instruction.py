@@ -1,12 +1,29 @@
 from dataclasses import dataclass
 from enum import Enum
 from typing import TypeGuard
+import re
 
 # Serialize Instruction instances into Intel or AT&T syntax
 # Assumes that caller will order operands for Instruction.operands in destination, source order
 # Ex.
 # Instruction(b"mov",[Register(b"r11"),Immediate(b"0x10")]).serialize_intel() == "     mov r11, 0x10"
 # Instruction(b"mov",[Register(b"r11"),Immediate(b"0x10")]).serialize_att() ==   "     mov $0x10, %r11"
+
+
+def is_decimal(num: bytes) -> bool:
+    try:
+        int(num)
+        return True
+    except:
+        return False
+
+
+def is_hexadecimal(num: bytes) -> bool:
+    try:
+        int(num, 16)
+        return True
+    except:
+        return False
 
 
 @dataclass
@@ -55,7 +72,32 @@ class EAWidth(Enum):
         return self.name.lower().replace("_", " ").encode("ascii")
 
     def serialize_att(self) -> bytes:
+        # TODO: handle movl as dword
         return self.name[0].lower().encode("ascii")
+
+    @staticmethod
+    def deserialize_intel(width: bytes) -> "EAWidth":
+        key: str = width.decode("ascii").upper().replace(" ", "_")
+
+        return EAWidth[key]
+
+    @staticmethod
+    def deserialize_att(width: bytes) -> "EAWidth":
+        # TODO: handle movl as dword
+        # TODO: This dict sucks
+        # Could just make it return directly what it gets from the dict
+        widths: dict[bytes, str] = {
+            b"b": "BYTE_PTR",
+            b"w": "WORD_PTR",
+            b"d": "DWORD_PTR",
+            b"l": "DWORD_PTR",
+            b"q": "QWORD_PTR",
+            b"x": "XMMWORD_PTR",
+            b"y": "YMMWORD_PTR",
+            b"z": "ZMMWORD_PTR",
+        }
+
+        return EAWidth[widths[width[0:1].lower()]]
 
 
 @dataclass
@@ -79,7 +121,7 @@ class EffectiveAddress:
             ea_components.append(self.base.serialize_intel())
         if self.index is not None and self.scale is not None:
             ea_components.append(
-                self.index.serialize_intel() + b" * " + str(self.scale).encode("ascii")
+                self.index.serialize_intel() + b"*" + str(self.scale).encode("ascii")
             )
         if self.displacement is not None:
             ea_components.append(self.displacement.serialize_intel())
@@ -103,6 +145,77 @@ class EffectiveAddress:
         result += b",".join(ea_components)
         result += b")"
         return result
+
+    @staticmethod
+    def deserialize_intel(memory_operand: bytes) -> "EffectiveAddress":
+        # Expects memory operand in format width [base+index*scale+displacement]
+        # With all parts being optional, may or may not have spaces around each
+
+        # TODO: Rename one of the 2 things we called 'offset'
+        ea_match: re.Match[bytes] | None = re.match(
+            rb"(?P<width>[^\[]*)\[(?P<offset>[^\]]*)\]", memory_operand
+        )
+        assert ea_match is not None
+
+        # Could be width or could be "offset label"
+        # TODO: Handle rip relative movs like: offset label[rip + immediate]
+        width_key: bytes = ea_match["width"].strip(b" \t")
+
+        if len(width_key) > 0:
+            width: EAWidth | None = EAWidth.deserialize_intel(width_key)
+        else:
+            width = None
+
+        offset: bytes = b"".join(ea_match["offset"].strip(b" \t").split())
+
+        # combinations:
+        # [base]
+        # [displacement]
+        # [base+displacement]
+        # [index*scale+displacement]
+        # [base+index+displacement]
+        # [base+index*scale+displacement]
+        terms: list[bytes] = offset.split(b"+")
+        scale: int | None = None
+        index: Register | None = None
+        base: Register | None = None
+        displacement: Immediate | None = None
+
+        # If both index and scale are present, set them
+        for term in terms:
+            if b"*" in term:
+                idx, scl = term.split(b"*")
+                index = Register(idx)
+                if is_hexadecimal(scl):
+                    scale = int(scl, 16)
+                elif is_decimal(scl):
+                    scale = int(scl)
+                else:
+                    assert False
+            break
+
+        # Case of having index, but no scale
+        if index is scale and len(terms) >= 3:
+            index = Register(terms[1])
+
+        # If there are multiple terms and (scale is not present, or there are 3 terms)
+        if len(terms) > 1 and (scale is None or len(terms) == 3):
+            base = Register(terms[0])
+
+        # If displacement exists, it is always the last term
+        if len(terms) > 1 or (is_hexadecimal(terms[0]) or is_decimal(terms[0])):
+            displacement = Immediate(terms[-1])
+        else:
+            # If displacement does not exist, base is the first term
+            base = Register(terms[0])
+
+        return EffectiveAddress(
+            width=width, base=base, index=index, scale=scale, displacement=displacement
+        )
+
+    @staticmethod
+    def deserialize_att(memory_operand: bytes) -> "EffectiveAddress":
+        return None
 
 
 @dataclass
@@ -150,7 +263,12 @@ class Instruction:
             if isinstance(op, EffectiveAddress) and op.width is not None:
                 # If an instruction has 2 EA operands, this will be intentionally wrong, and shouldn't assemble.
                 mnemonic += op.width.serialize_att()
-        return mnemonic + b" " + b", ".join(op.serialize_att() for op in reversed(self.operands))
+        return (
+            b"    "
+            + mnemonic
+            + b" "
+            + b", ".join(op.serialize_att() for op in reversed(self.operands))
+        )
 
     def serialize_intel(self) -> bytes:
         return (
