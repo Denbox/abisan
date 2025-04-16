@@ -192,7 +192,6 @@ class EffectiveAddress:
                     scale = int(scl)
                 else:
                     assert False
-            break
 
         # Case of having index, but no scale
         if index is scale and len(terms) >= 3:
@@ -215,7 +214,7 @@ class EffectiveAddress:
 
     @staticmethod
     def deserialize_att(memory_operand: bytes) -> "EffectiveAddress":
-        return None
+        return EffectiveAddress()
 
 
 @dataclass

@@ -504,16 +504,20 @@ def generate_generic_memory_instrumentation(line: bytes, config: Config) -> byte
         Instruction(b"push", Register(b"rax")),
         Instruction(b"push", Register(b"rbx")),
         Instruction(
-            b"lea", Register(b"rax"), Label(get_memory_operand(line))
-        ),  # convert get_memory_operand to EffectiveAddress
-        (
-            Instruction(
-                b"add", Register(b"rax"), Immediate(hex(REDZONE_SIZE).encode("ascii"))
-            )
+            b"lea",
+            Register(b"rax"),
+            EffectiveAddress.deserialize_intel(get_memory_operand(line)),
+        ),
+        *(
+            [
+                Instruction(
+                    b"add",
+                    Register(b"rax"),
+                    Immediate(hex(REDZONE_SIZE).encode("ascii")),
+                )
+            ]
             if config.redzone_enabled
-            else Instruction(
-                b"nop",
-            )
+            else []
         ),
         Instruction(b"cmp", Register(b"rax"), Register(b"rsp")),
         Instruction(b"setb", Register(b"bl")),
@@ -538,6 +542,7 @@ def generate_generic_memory_instrumentation(line: bytes, config: Config) -> byte
 
     return b"\n".join(map(Instruction.serialize_intel, instructions)) + b"\n"
 
+
 def generate_reg_taint_check(
     line: bytes, insn: CsInsn, r: int, config: Config
 ) -> bytes:
@@ -560,21 +565,23 @@ def generate_reg_taint_check(
             Instruction(b"push", Register(b"rax")),
             Instruction(b"push", Register(b"rbx")),
             Instruction(
-                b"lea", Register(b"rbx"), Label(get_memory_operand(line))
-            ),  # TODO:  convert get_memory_operand to EffectiveAddress
+                b"lea",
+                Register(b"rbx"),
+                EffectiveAddress.deserialize_intel(get_memory_operand(line)),
+            ),
             Instruction(
                 insn.mnemonic.encode("ascii"), Register(b"rax"), Register(b"rbx")
             ),
-            (
-                Instruction(
-                    b"add",
-                    Register(b"rbx"),
-                    Immediate(hex(REDZONE_SIZE).encode("ascii")),
-                )
+            *(
+                [
+                    Instruction(
+                        b"add",
+                        Register(b"rbx"),
+                        Immediate(hex(REDZONE_SIZE).encode("ascii")),
+                    )
+                ]
                 if config.redzone_enabled
-                else Instruction(
-                    b"nop",
-                )
+                else []
             ),
             Instruction(b"cmp", Register(b"rbx"), Register(b"rsp")),
             Instruction(b"setb", Register(b"bl")),
