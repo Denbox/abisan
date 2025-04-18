@@ -79,18 +79,34 @@ def parse_tunable_envs(tunables: str):
     return Config(redzone_enabled, stack_size)
 
 
-def get_memory_operand(line: bytes) -> bytes:
+def get_memory_operand(line: bytes, insn: CsInsn) -> EffectiveAddress:
+
+    syntax = "att"
     tokens: list[bytes] = line.split(maxsplit=1)
     assert len(tokens) == 2
-
+    
     mnemonic: bytes = tokens[0].lower()
     assert mnemonic != b"lea"
 
     # TODO: Support AT&T syntax
     # TODO: Support single-quoted [ and ,.
-    for operand in (token.strip() for token in tokens[1].split(b",")):
-        if b"[" in operand:
-            return operand
+    if "intel" in syntax:
+        for operand in (token.strip() for token in tokens[1].split(b",")):
+            if b"[" in operand:
+                return EffectiveAddress.deserialize_intel(operand)
+    elif "att" in syntax:
+        # TODO: handle Effective Address with only displacement (no parenthesis)
+        offset_match: re.Match[str] | None = re.match(
+            rf"(?:{tokens[0].decode('ascii')}|,)\s+(?P<offset>[^,]+\(.*?\))", line.lstrip().decode("ascii")
+        )
+        if offset_match is not None:
+            # Pass to effective address: b"width memory_operand"
+            width_mem_operand: bytes = b" ".join((
+                tokens[0].lstrip()[len(insn.mnemonic):len(insn.mnemonic)+1],
+                offset_match["offset"].encode("ascii")
+            ))
+            return EffectiveAddress.deserialize_att(width_mem_operand)
+    print(line)
     assert False
 
 
@@ -507,9 +523,7 @@ def generate_cmov_instrumentation(line: bytes, insn: CsInsn, config: Config) -> 
         return b"\n".join(map(Instruction.serialize_intel, instructions)) + b"\n"
 
 
-    
-
-def generate_generic_memory_instrumentation(line: bytes, config: Config) -> bytes:
+def generate_generic_memory_instrumentation(line: bytes, insn: CsInsn, config: Config) -> bytes:
     instructions: list[Instruction] = [
         Instruction(b"pushfq"),
         Instruction(b"push", Register(b"rax")),
@@ -517,7 +531,7 @@ def generate_generic_memory_instrumentation(line: bytes, config: Config) -> byte
         Instruction(
             b"lea",
             Register(b"rax"),
-            EffectiveAddress.deserialize_intel(get_memory_operand(line)),
+            get_memory_operand(line, insn),
         ),
         *(
             [
@@ -578,7 +592,7 @@ def generate_reg_taint_check(
             Instruction(
                 b"lea",
                 Register(b"rbx"),
-                EffectiveAddress.deserialize_intel(get_memory_operand(line)),
+                get_memory_operand(line, insn),
             ),
             Instruction(
                 insn.mnemonic.encode("ascii"), Register(b"rax"), Register(b"rbx")
@@ -832,11 +846,15 @@ def main() -> None:
         for i, line in enumerate(map(bytes.rstrip, map(remove_comment, lines))):
             insn: CsInsn = assembled_instructions.get(i)
             if insn is not None:
+                print("mnem:",insn.mnemonic)
+                print(get_memory_operand(line,insn))
+                registers_read: set[int] = get_registers_read(insn)
+                registers_written: set[int] = get_registers_written(insn)
                 if insn.op_count(capstone.CS_OP_MEM) > 0 and insn.mnemonic != "lea":
                     if insn.mnemonic.startswith("cmov"):
                         f.write(generate_cmov_instrumentation(line, insn, config))
                     else:
-                        f.write(generate_generic_memory_instrumentation(line, config))
+                        f.write(generate_generic_memory_instrumentation(line, insn, config))
 
                 if needs_taint_check_for_read(insn):
                     for r in get_registers_read(insn):

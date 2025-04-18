@@ -166,6 +166,7 @@ class EffectiveAddress:
         # [index*scale+displacement]
         # [base+index+displacement]
         # [base+index*scale+displacement]
+        # [base+index*scale] HANDLE
         terms: list[bytes] = offset.split(b"+")
 
         # If both index and scale are present, set them
@@ -203,7 +204,60 @@ class EffectiveAddress:
 
     @staticmethod
     def deserialize_att(memory_operand: bytes) -> "EffectiveAddress":
-        return EffectiveAddress() #TODO
+        # Expects memory_operand to be provided in the form: "width memory_operand"
+
+        width: EAWidth | None = None
+        offset: bytes = b""
+
+        # No width
+        if memory_operand[0:1].isspace():
+            offset = memory_operand.strip()
+        else: 
+            width_offset = memory_operand.split(maxsplit=1)
+            width = EAWidth.deserialize_att(width_offset[0])
+            offset = width_offset[1]
+    
+
+        # Displacement may have to be an int
+        displacement: Immediate | None = None
+        base: Register | None = None
+        index: Register | None = None
+        scale: int | None = None
+
+        # Combinations of components:
+        # (%base)
+        # displacement
+        # displacement(%base)
+        # displacement(%base,%index)
+        # displacement(%base,%index,scale)
+        # displacement(%index,scale)
+        # (%base,%index,scale)
+
+        # This regex correctly matches in all cases EXCEPT displacement(%index,scale)
+        components: re.Match[bytes] | None = re.match(
+            rb"\A(?P<disp>(?:0x[0-9a-fA-F]+|\d+))?\s*(?:\(\s*(?:(?P<base>%[a-zA-Z0-9]+)?(?:,\s*(?P<index>%[a-zA-Z0-9]+))?(?:,\s*(?P<scale>\d+))?)\s*\))?\Z",
+            offset,
+        )
+        if components is not None:
+            if components["disp"] is not None:
+                displacement = Immediate(components["disp"])
+            if components["base"] is not None:
+                base = Register(components["base"])
+            if components["index"] is not None:              
+                index = Register(components["index"])
+            if components["scale"] is not None:
+                if is_hexadecimal(components["scale"]):
+                    scale = int(components["scale"], 16)
+                else:
+                    scale = int(components["scale"])
+
+            # Cover case of: displacement(%index,scale) in which the regex incorrectly assigns index to base
+            if offset.count(b",") == 1 and index is None:
+                base, index = index, base
+
+        return EffectiveAddress(
+            width=width, displacement=displacement, base=base, index=index, scale=scale
+        )
 
 
 @dataclass
