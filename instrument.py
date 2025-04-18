@@ -1,7 +1,13 @@
+import dataclasses
 import os
 import subprocess
 import sys
 import re
+
+import capstone  # type: ignore
+from capstone import Cs, CsInsn, x86_const
+from elftools.elf.elffile import ELFFile
+from elftools.elf.sections import Section, SymbolTableSection
 
 from instruction import (
     Instruction,
@@ -12,13 +18,6 @@ from instruction import (
     Label,
     JumpTarget,
 )
-
-import capstone  # type: ignore
-from capstone import Cs, CsInsn, x86_const
-from elftools.elf.elffile import ELFFile
-from elftools.elf.sections import Section, SymbolTableSection
-
-import dataclasses
 
 
 cs: Cs = Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
@@ -690,7 +689,7 @@ def generate_generic_reg_taint_update(r: int) -> bytes:
     return b"\n".join(map(Instruction.serialize_intel, instructions)) + b"\n"
 
 
-def generate_cmov_reg_taint_update(line: bytes, insn: CsInsn, r: int) -> bytes:
+def generate_cmov_reg_taint_update(insn: CsInsn, r: int) -> bytes:
     return (
         b"\n".join(
             (
@@ -800,8 +799,6 @@ def main() -> None:
         for i, line in enumerate(map(bytes.rstrip, map(remove_comment, lines))):
             insn: CsInsn = assembled_instructions.get(i)
             if insn is not None:
-                registers_read: set[int] = get_registers_read(insn)
-                registers_written: set[int] = get_registers_written(insn)
                 if insn.op_count(capstone.CS_OP_MEM) > 0 and insn.mnemonic != "lea":
                     if insn.mnemonic.startswith("cmov"):
                         f.write(generate_cmov_instrumentation(line, insn, config))
@@ -814,7 +811,7 @@ def main() -> None:
 
                 for r in get_registers_written(insn):
                     if insn.mnemonic.startswith("cmov"):
-                        f.write(generate_cmov_reg_taint_update(line, insn, r))
+                        f.write(generate_cmov_reg_taint_update(insn, r))
                     else:
                         f.write(generate_generic_reg_taint_update(r))
 

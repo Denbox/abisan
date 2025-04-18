@@ -11,19 +11,13 @@ import re
 
 
 def is_decimal(num: bytes) -> bool:
-    try:
-        int(num)
-        return True
-    except:
-        return False
+    return num.isdigit()
 
 
 def is_hexadecimal(num: bytes) -> bool:
-    try:
-        int(num, 16)
-        return True
-    except:
-        return False
+    if num.startswith(b"0x") or num.startswith(b"0X"):
+        num = num[2:]
+    return all(c in b"0123456789abcedfABCDEF" for c in num)
 
 
 @dataclass
@@ -161,10 +155,7 @@ class EffectiveAddress:
         # TODO: Handle rip relative movs like: offset label[rip + immediate]
         width_key: bytes = ea_match["width"].strip(b" \t")
 
-        if len(width_key) > 0:
-            width: EAWidth | None = EAWidth.deserialize_intel(width_key)
-        else:
-            width = None
+        width: EAWidth | None = EAWidth.deserialize_intel(width_key) if len(width_key) > 0 else None
 
         offset: bytes = b"".join(ea_match["offset"].strip(b" \t").split())
 
@@ -176,32 +167,30 @@ class EffectiveAddress:
         # [base+index+displacement]
         # [base+index*scale+displacement]
         terms: list[bytes] = offset.split(b"+")
-        scale: int | None = None
-        index: Register | None = None
-        base: Register | None = None
-        displacement: Immediate | None = None
 
         # If both index and scale are present, set them
+        scale: int | None = None
+        index: Register | None = None
         for term in terms:
             if b"*" in term:
                 idx, scl = term.split(b"*")
                 index = Register(idx)
                 if is_hexadecimal(scl):
                     scale = int(scl, 16)
-                elif is_decimal(scl):
-                    scale = int(scl)
                 else:
-                    assert False
+                    raise ValueError("Invalid scale")
 
         # Case of having index, but no scale
-        if index is scale and len(terms) >= 3:
+        if index is None and scale is None and len(terms) >= 3:
             index = Register(terms[1])
 
         # If there are multiple terms and (scale is not present, or there are 3 terms)
+        base: Register | None = None
         if len(terms) > 1 and (scale is None or len(terms) == 3):
             base = Register(terms[0])
 
         # If displacement exists, it is always the last term
+        displacement: Immediate | None = None
         if len(terms) > 1 or (is_hexadecimal(terms[0]) or is_decimal(terms[0])):
             displacement = Immediate(terms[-1])
         else:
@@ -214,7 +203,7 @@ class EffectiveAddress:
 
     @staticmethod
     def deserialize_att(memory_operand: bytes) -> "EffectiveAddress":
-        return EffectiveAddress()
+        return EffectiveAddress() #TODO
 
 
 @dataclass
@@ -222,9 +211,9 @@ class JumpTarget:
     val: EffectiveAddress | Label | Register | Immediate
 
     def serialize_att(self) -> bytes:
-        if isinstance(self.val, Register) or isinstance(self.val, EffectiveAddress):
+        if isinstance(self.val, (Register, EffectiveAddress)):
             return b"*" + self.val.serialize_att()
-        if isinstance(self.val, Label) or isinstance(self.val, Immediate):
+        if isinstance(self.val, (Label, Immediate)):
             return self.val.serialize_att()
         raise ValueError("This should never happen!")
 
@@ -235,13 +224,7 @@ class JumpTarget:
 def is_valid_operand_list(
     operands: list[object],
 ) -> TypeGuard[list[Register | Immediate | Label | EffectiveAddress | JumpTarget]]:
-    return all(
-        any(
-            isinstance(op, t)
-            for t in (Register, Immediate, Label, EffectiveAddress, JumpTarget)
-        )
-        for op in operands
-    )
+    return all(isinstance(op, (Register, Immediate, Label, EffectiveAddress, JumpTarget)) for op in operands)
 
 
 @dataclass
