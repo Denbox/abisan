@@ -19,6 +19,11 @@ def is_hexadecimal(num: bytes) -> bool:
         num = num[2:]
     return all(c in b"0123456789abcedfABCDEF" for c in num)
 
+def is_register_att(reg: bytes) -> bool:
+    return (re.match(rb"\A%[0-9a-zA-Z]+\Z", reg) is not None)
+
+def is_immediate_att(imm: bytes) -> bool:
+    return (re.match(rb"\A\$(?:0[xX])?[0-9a-fA-F]+\Z", imm) is not None)
 
 @dataclass
 class Register:
@@ -100,7 +105,7 @@ class EffectiveAddress:
     base: Register | None = None
     index: Register | None = None
     scale: int | None = None
-    displacement: Immediate | None = None
+    displacement: int | None = None
     offset: Label | None = None
 
     def serialize_intel(self) -> bytes:
@@ -118,7 +123,7 @@ class EffectiveAddress:
                 self.index.serialize_intel() + b"*" + str(self.scale).encode("ascii")
             )
         if self.displacement is not None:
-            ea_components.append(self.displacement.serialize_intel())
+            ea_components.append(str(self.displacement).encode("ascii"))
         result += b"+".join(ea_components)
         result += b"]"
         return result
@@ -126,7 +131,7 @@ class EffectiveAddress:
     def serialize_att(self) -> bytes:
         result: bytes = b""
         if self.displacement is not None:
-            result += self.displacement.serialize_att()
+            result += str(self.displacement).encode("ascii")
         if self.offset is not None:
             result += b"+" + self.offset.serialize_att()
         ea_components: list[bytes] = []
@@ -191,9 +196,9 @@ class EffectiveAddress:
             base = Register(terms[0])
 
         # If displacement exists, it is always the last term
-        displacement: Immediate | None = None
-        if len(terms) > 1 or (is_hexadecimal(terms[0]) or is_decimal(terms[0])):
-            displacement = Immediate(terms[-1])
+        displacement: int | None = None
+        if len(terms) > 1 or is_hexadecimal(terms[0]):
+            displacement = int(terms[-1], 16)
         else:
             # If displacement does not exist, base is the first term
             base = Register(terms[0])
@@ -203,23 +208,16 @@ class EffectiveAddress:
         )
 
     @staticmethod
-    def deserialize_att(memory_operand: bytes) -> "EffectiveAddress":
-        # Expects memory_operand to be provided in the form: "width memory_operand"
-
+    def deserialize_att(width_string: bytes,memory_operand: bytes) -> "EffectiveAddress":
         width: EAWidth | None = None
-        offset: bytes = b""
 
         # No width
-        if memory_operand[0:1].isspace():
-            offset = memory_operand.strip()
-        else: 
-            width_offset = memory_operand.split(maxsplit=1)
-            width = EAWidth.deserialize_att(width_offset[0])
-            offset = width_offset[1]
-    
+        if len(width_string) > 0:
+            width = EAWidth.deserialize_att(width_string)
+      
 
         # Displacement may have to be an int
-        displacement: Immediate | None = None
+        displacement: int | None = None
         base: Register | None = None
         index: Register | None = None
         scale: int | None = None
@@ -233,28 +231,129 @@ class EffectiveAddress:
         # displacement(%index,scale)
         # (%base,%index,scale)
 
-        # This regex correctly matches in all cases EXCEPT displacement(%index,scale)
-        components: re.Match[bytes] | None = re.match(
-            rb"\A(?P<disp>(?:0x[0-9a-fA-F]+|\d+))?\s*(?:\(\s*(?:(?P<base>%[a-zA-Z0-9]+)?(?:,\s*(?P<index>%[a-zA-Z0-9]+))?(?:,\s*(?P<scale>\d+))?)\s*\))?\Z",
-            offset,
-        )
-        if components is not None:
-            if components["disp"] is not None:
-                displacement = Immediate(components["disp"])
-            if components["base"] is not None:
-                base = Register(components["base"])
-            if components["index"] is not None:              
-                index = Register(components["index"])
-            if components["scale"] is not None:
-                if is_hexadecimal(components["scale"]):
-                    scale = int(components["scale"], 16)
+
+      
+        # Remove trailing operands
+        rightmost_comma_index: int
+        rightmost_close_parenthesis_index: int
+        memory_op_clean: bytes = b"".join(memory_operand.split(b" ")) # How to also split on tabs 
+        while (
+                (rightmost_comma_index := memory_op_clean.rfind(b",")) >
+                (rightmost_close_parenthesis_index := memory_op_clean.rfind(b")"))
+        ):
+            memory_op_clean = memory_op_clean[: rightmost_comma_index]
+
+        match memory_op_clean.split(b","):
+            # Cases may contain non-memory-operand prefixes
+            # In att, it is generally not permitted to have more than one memory operand in a single instruction
+            
+            case [t1, t2, t3]:
+                # Contains:
+                # (%base,%index,scale)
+                # displacement(%base,%index,scale)
+
+                if not b"(" in t1:
+                    return None
+
+                # Displacement and base:
+                # Separate Displacement from the base if it exists:
+                disp, t1 = t1.split(b"(")
+
+                # Displacement is not an immediate or register
+                # Displacement must be able to be a hexadecimal
+                # Base is a register
+                if (
+                        (len(disp) > 0 and not is_hexadecimal(disp))
+                        or not is_register_att(t1)
+                ): 
+                    return None
+
+                displacement = int(disp, 16) if len(disp) > 0 else None
+
+                base = Register(t1)
+
+                
+                t3 = t3.strip(b")")
+                # Index is a register
+                # Scale is not a should be a hexadecimal, meaning it is not an immediate
+                if (
+                        not is_register_att(t2)
+                        or not is_hexadecimal(t3)
+                ):
+                    return None
+
+                index = Register(t2)
+                scale = int(t3, 16)
+
+                
+            case [t1, t2]:
+                # Contains:
+                # displacement(%base,%index)
+                # displacement(%index,scale)
+                
+                if not b"(" in t1:
+                    return None
+
+                # Separate Displacement from the base/index:
+                disp, t1 = t1.split(b"(")
+                t2 = t2.strip(b")")
+
+                # Displacement is not an immediate or register
+                # Displacement must be able to be a hexadecimal
+                # Base/Index is a register
+                if (
+                        (len(disp) > 0 and not is_hexadecimal(disp))
+                        or not is_register_att(t1)
+                ): 
+                    return None
+
+                displacement = int(disp, 16) if len(disp) > 0 else None
+
+                if is_register_att(t2):
+                    base = Register(t1)
+                    index = Register(t2)
+                elif is_hexadecimal(t2):
+                    index = Register(t1)
+                    scale = int(t2, 16)
                 else:
-                    scale = int(components["scale"])
+                    return None
+                
+                    
+            case [t1]:
+                # Contains:
+                # (%base)
+                # displacement
+                # displacement(%base)
+                
+                disp: bytes = b""
+                if b"(" in t1:
+                    disp, t1 = t1.split(b"(")
+                    t1 = t1.strip(b")")
 
-            # Cover case of: displacement(%index,scale) in which the regex incorrectly assigns index to base
-            if offset.count(b",") == 1 and index is None:
-                base, index = index, base
+                    if not is_register_att(t1):
+                        return None
+                    base = Register(t1)
+                else:
+                    disp = t1
 
+                    
+                if (len(disp) > 0 and not is_hexadecimal(disp)):
+                    return None
+                
+                displacement = int(disp, 16) if len(disp) > 0 else None
+                
+                
+            case _:
+                return None
+           
+            
+
+        print("\nFOUND EA:",
+                  "\nDisplacement:", hex(displacement) if displacement is not None else None,
+                  "\nBase:", base,
+                  "\nIndex:", index,
+                  "\nScale:", scale
+              )
         return EffectiveAddress(
             width=width, displacement=displacement, base=base, index=index, scale=scale
         )

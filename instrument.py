@@ -81,7 +81,7 @@ def parse_tunable_envs(tunables: str):
 
 def get_memory_operand(line: bytes, insn: CsInsn) -> EffectiveAddress:
 
-    syntax = "att"
+    syntax = "intel"
     tokens: list[bytes] = line.split(maxsplit=1)
     assert len(tokens) == 2
     
@@ -95,18 +95,24 @@ def get_memory_operand(line: bytes, insn: CsInsn) -> EffectiveAddress:
             if b"[" in operand:
                 return EffectiveAddress.deserialize_intel(operand)
     elif "att" in syntax:
-        # TODO: handle Effective Address with only displacement (no parenthesis)
-        offset_match: re.Match[str] | None = re.match(
-            rf"(?:{tokens[0].decode('ascii')}|,)\s+(?P<offset>[^,]+\(.*?\))", line.lstrip().decode("ascii")
-        )
-        if offset_match is not None:
-            # Pass to effective address: b"width memory_operand"
-            width_mem_operand: bytes = b" ".join((
-                tokens[0].lstrip()[len(insn.mnemonic):len(insn.mnemonic)+1],
-                offset_match["offset"].encode("ascii")
-            ))
-            return EffectiveAddress.deserialize_att(width_mem_operand)
-    print(line)
+        # Remove mnemonic
+        # Starting left to right, try and parse as a memory operand, if we reach the potential end of an operand, yay!
+        # Otherwise, consume everything up until the next comma
+        
+        mem_operand: bytes = line.lstrip()[len(mnemonic):]
+        EA: EffectiveAddress | None
+        width: bytes  =  tokens[0].lstrip()[len(insn.mnemonic):len(insn.mnemonic)+1]
+  
+        while (EA := EffectiveAddress.deserialize_att(width, mem_operand.lstrip())) is None:
+            if b"," in mem_operand and not mem_operand.endswith(b","):
+                before_first_comma = mem_operand.split(b",")[0]
+                mem_operand = mem_operand[len(before_first_comma)+1:]
+            else: # No operands remaining
+                assert False
+        return EA
+        
+       
+    
     assert False
 
 
@@ -616,9 +622,7 @@ def generate_reg_taint_check(
                 EffectiveAddress(
                     offset=Label(b"abisan_taint_state"),
                     base=Register(b"rip"),
-                    displacement=Immediate(
-                        str(cs_to_taint_idx(register_normalize(r))).encode("ascii")
-                    ),
+                    displacement= cs_to_taint_idx(register_normalize(r))
                 ),
             ),
             Instruction(
@@ -659,9 +663,7 @@ def generate_reg_taint_check(
                 EffectiveAddress(
                     offset=Label(b"abisan_taint_state"),
                     base=Register(b"rip"),
-                    displacement=Immediate(
-                        str(cs_to_taint_idx(register_normalize(r))).encode("ascii")
-                    ),
+                    displacement=cs_to_taint_idx(register_normalize(r))
                 ),
             ),
             Instruction(
@@ -699,9 +701,7 @@ def generate_generic_reg_taint_update(r: int) -> bytes:
             EffectiveAddress(
                 offset=Label(b"abisan_taint_state"),
                 base=Register(b"rip"),
-                displacement=Immediate(
-                    str(cs_to_taint_idx(register_normalize(r))).encode("ascii")
-                ),
+                displacement=cs_to_taint_idx(register_normalize(r))
             ),
         ),
         Instruction(
@@ -846,8 +846,6 @@ def main() -> None:
         for i, line in enumerate(map(bytes.rstrip, map(remove_comment, lines))):
             insn: CsInsn = assembled_instructions.get(i)
             if insn is not None:
-                print("mnem:",insn.mnemonic)
-                print(get_memory_operand(line,insn))
                 registers_read: set[int] = get_registers_read(insn)
                 registers_written: set[int] = get_registers_written(insn)
                 if insn.op_count(capstone.CS_OP_MEM) > 0 and insn.mnemonic != "lea":
