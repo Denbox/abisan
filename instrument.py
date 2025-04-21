@@ -463,39 +463,51 @@ def cs_to_taint_idx(r: int) -> int:
 
 
 def generate_cmov_instrumentation(line: bytes, insn: CsInsn, config: Config) -> bytes:
-    return (
-        b"\n".join(
-            (
-                b"    pushfq",
-                b"    push rax",
-                b"    push rbx",
-                b"    lea rbx, " + get_memory_operand(line),
-                b"    mov rax, rsp",
-                b"    " + insn.mnemonic.encode("ascii") + b" rax, rbx",
-                (
-                    (b"    add rax, " + hex(REDZONE_SIZE).encode("ascii"))
-                    if config.redzone_enabled
-                    else b""
-                ),
-                b"    cmp rax, rsp",
-                b"    setb bl",
-                b"    add rax, "
-                + hex(
+        instructions: list[Instruction] = [
+        Instruction(b"pushfq"),
+        Instruction(b"push", Register(b"rax")),
+        Instruction(b"push", Register(b"rbx")),
+        Instruction(
+            b"lea",
+            Register(b"rbx"),
+            EffectiveAddress.deserialize_intel(get_memory_operand(line))
+        ),
+        Instruction(b"mov", Register(b"rax"), Register(b"rsp")),
+        *(
+            [
+                Instruction(
+                    b"add",
+                    Register(b"rax"),
+                    Immediate(hex(REDZONE_SIZE).encode("ascii")),
+                )
+            ]
+            if config.redzone_enabled
+            else []
+        ),
+        Instruction(b"cmp", Register(b"rax"), Register(b"rsp")),
+        Instruction(b"setb", Register(b"bl")),
+        Instruction(
+            b"add",
+            Register(b"rax"),
+            Immediate(
+                hex(
                     config.stack_size - (REDZONE_SIZE if config.redzone_enabled else 0)
-                ).encode("ascii"),
-                b"    cmp rax, rsp",
-                b"    seta bh",
-                b"    add bl, bh",
-                b"    cmp bl, 2",
-                b"    je abisan_fail_mov_below_rsp",
-                b"    pop rbx",
-                b"    pop rax",
-                b"    popfq",
-            )
-        )
-        + b"\n"
-    )
+                ).encode("ascii")
+            ),
+        ),
+        Instruction(b"cmp", Register(b"rax"), Register(b"rsp")),
+        Instruction(b"seta", Register(b"bh")),
+        Instruction(b"add", Register(b"bl"), Register(b"bh")),
+        Instruction(b"cmp", Register(b"bl"), Immediate(b"2")),
+        Instruction(b"je", JumpTarget(Label(b"abisan_fail_mov_below_rsp"))),
+        Instruction(b"pop", Register(b"rbx")),
+        Instruction(b"pop", Register(b"rax")),
+        Instruction(b"popfq"),
+        ]
+        return b"\n".join(map(Instruction.serialize_intel, instructions)) + b"\n"
 
+
+    
 
 def generate_generic_memory_instrumentation(line: bytes, config: Config) -> bytes:
     instructions: list[Instruction] = [
@@ -690,29 +702,50 @@ def generate_generic_reg_taint_update(r: int) -> bytes:
 
 
 def generate_cmov_reg_taint_update(insn: CsInsn, r: int) -> bytes:
-    return (
-        b"\n".join(
-            (
-                b"    push rax",
-                b"    push rbx",
-                b"    push rcx",
-                b"    pushfq",
-                f"    lea rax, offset abisan_taint_state[rip + {cs_to_taint_idx(register_normalize(r))}]".encode(
-                    "ascii"
-                ),
-                b"    mov bl, byte ptr [rax]",
-                b"    mov cl, bl",
-                f"    and cl, {bitwise_neg8(get_taint_mask(r))}".encode("ascii"),
-                b"    " + insn.mnemonic.encode("ascii") + b" rbx, rcx",
-                b"    mov byte ptr [rax], bl",
-                b"    popfq",
-                b"    pop rcx",
-                b"    pop rbx",
-                b"    pop rax",
+    instructions: list[Instruction] = [
+        Instruction(b"push", Register(b"rax")),
+        Instruction(b"push", Register(b"rbx")),
+        Instruction(b"push", Register(b"rcx")),
+        Instruction(b"pushfq"),
+        Instruction(
+            b"lea",
+            Register(b"rax"),
+            EffectiveAddress(
+                offset=Label(b"abisan_taint_state"),
+                base=Register(b"rip"),
+                displacement=Immediate(
+                    str(cs_to_taint_idx(register_normalize(r))).encode("ascii")
+                )
             )
-        )
-        + b"\n"
-    )
+        ),
+        Instruction(
+            b"mov",
+            Register(b"bl"),
+            EffectiveAddress(width=EAWidth.BYTE_PTR, base=Register(b"rax")),
+        ),
+        Instruction(b"mov", 
+            Register(b"cl"), 
+            Register(b"bl")
+        ),
+        Instruction(
+            b"and",
+            Register(b"cl"),
+            Immediate(str(bitwise_neg8(get_taint_mask(r))).encode("ascii")),
+        ),
+        Instruction(
+            insn.mnemonic.encode("ascii"), Register(b"rbx"), Register(b"rcx")
+        ),
+        Instruction(
+            b"mov",
+            EffectiveAddress(width=EAWidth.BYTE_PTR, base=Register(b"rax")),
+            Register(b"bl"),
+        ),
+        Instruction(b"popfq"),
+        Instruction(b"pop", Register(b"rcx")),
+        Instruction(b"pop", Register(b"rbx")),
+        Instruction(b"pop", Register(b"rax")),
+    ]
+    return b"\n".join(map(Instruction.serialize_intel, instructions)) + b"\n"
 
 
 def generate_taint_after_call() -> bytes:
