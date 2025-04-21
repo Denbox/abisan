@@ -41,42 +41,50 @@ TAINT_STATE_RBP: int = 14
 TAINT_STATE_EFLAGS: int = 15
 
 REDZONE_SIZE: int = 0x80
-
+REDZONE_ENABLED_ENV_NAME: str = "ABISAN_TUNABLES_REDZONE_ENABLED"
+STACK_SIZE_ENV_NAME: str = "ABISAN_TUNABLES_STACK_SIZE"
+SYNTAX_ENV_NAME: str = "ABISAN_TUNABLES_SYNTAX"
+NUM_ENVS: int = 3
 
 @dataclasses.dataclass
 class Config:
     redzone_enabled: bool
     stack_size: int
+    syntax: str
 
 
-# Expects Environment variables to be semicolon separated
-# REDZONE_ENABLED = int
-# STACK_SIZE = int
-def parse_tunable_envs(tunables: str):
+# tunables is a list of environment variable values in the following order:
+# 0: REDZONE_ENABLED
+# 1: STACK_SIZE
+# 2: SYNTAX
+def parse_tunable_envs(tunables: [str]):
     redzone_enabled: bool = False
     stack_size: int = 0x800000
+    syntax: str = "intel"
 
-    if len(tunables) > 0:
-        if tunables.startswith("REDZONE_ENABLED="):
-            tunables = tunables[len("REDZONE_ENABLED=") :]
-            redzone_enabled_match: re.Match[str] | None = re.match(
-                r"\A(?P<value>[0-9]+)", tunables
-            )
-            assert redzone_enabled_match is not None
-
+    
+    if len(tunables) == NUM_ENVS:
+        
+        redzone_enabled_match: re.Match[str] | None = re.match(
+            r"\A(?P<value>[0-9]+)", tunables[0]
+        )
+        if redzone_enabled_match is not None:
             redzone_enabled = bool(int(redzone_enabled_match["value"]))
 
-            tunables = tunables[len(redzone_enabled_match["value"]) :]
+        stack_size_match: re.Match[str] | None = re.match(
+            r"\A(?P<value>[0-9]+)", tunables[1]
+        )
+        if stack_size_match is not None:
+            stack_size = int(stack_size_match["value"])
 
-            if tunables.startswith(";STACK_SIZE="):
-                tunables = tunables[len(";STACK_SIZE=") :]
-                stack_size_match: re.Match[str] | None = re.match(
-                    r"\A(?P<value>[0-9]+)", tunables
-                )
-                assert stack_size_match is not None
-                stack_size = int(stack_size_match["value"])
+        syntax_match: re.Match[str] | None = re.match(
+            r"\A(?P<value>(intel)|(att))", tunables[2]
+        )
+        if syntax_match is not None:
+            syntax = syntax_match["value"]
+                
 
-    return Config(redzone_enabled, stack_size)
+    return Config(redzone_enabled, stack_size, syntax)
 
 
 def get_memory_operand(line: bytes, insn: CsInsn) -> EffectiveAddress:
@@ -797,7 +805,7 @@ def main() -> None:
         )
         sys.exit(1)
 
-    tunables: str = os.environ.get("ABISAN_TUNABLES", "")
+    tunables: [str] = [os.environ.get(REDZONE_ENABLED_ENV_NAME, ""), os.environ.get(STACK_SIZE_ENV_NAME, ""), os.environ.get(SYNTAX_ENV_NAME, "")]
     config: Config = parse_tunable_envs(tunables)
 
     input_file_name: str = sys.argv[1]
