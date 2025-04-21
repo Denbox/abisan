@@ -46,6 +46,7 @@ STACK_SIZE_ENV_NAME: str = "ABISAN_TUNABLES_STACK_SIZE"
 SYNTAX_ENV_NAME: str = "ABISAN_TUNABLES_SYNTAX"
 NUM_ENVS: int = 3
 
+
 @dataclasses.dataclass
 class Config:
     redzone_enabled: bool
@@ -57,14 +58,13 @@ class Config:
 # 0: REDZONE_ENABLED
 # 1: STACK_SIZE
 # 2: SYNTAX
-def parse_tunable_envs(tunables: [str]):
+def parse_tunable_envs(tunables: list[str]):
     redzone_enabled: bool = False
     stack_size: int = 0x800000
     syntax: str = "intel"
 
-    
     if len(tunables) == NUM_ENVS:
-        
+
         redzone_enabled_match: re.Match[str] | None = re.match(
             r"\A(?P<value>[0-9]+)", tunables[0]
         )
@@ -82,7 +82,6 @@ def parse_tunable_envs(tunables: [str]):
         )
         if syntax_match is not None:
             syntax = syntax_match["value"]
-                
 
     return Config(redzone_enabled, stack_size, syntax)
 
@@ -92,7 +91,7 @@ def get_memory_operand(line: bytes, insn: CsInsn) -> EffectiveAddress:
     syntax = "intel"
     tokens: list[bytes] = line.split(maxsplit=1)
     assert len(tokens) == 2
-    
+
     mnemonic: bytes = tokens[0].lower()
     assert mnemonic != b"lea"
 
@@ -106,21 +105,21 @@ def get_memory_operand(line: bytes, insn: CsInsn) -> EffectiveAddress:
         # Remove mnemonic
         # Starting left to right, try and parse as a memory operand, if we reach the potential end of an operand, yay!
         # Otherwise, consume everything up until the next comma
-        
-        mem_operand: bytes = line.lstrip()[len(mnemonic):]
+
+        mem_operand: bytes = line.lstrip()[len(mnemonic) :]
         EA: EffectiveAddress | None
-        width: bytes  =  tokens[0].lstrip()[len(insn.mnemonic):len(insn.mnemonic)+1]
-  
-        while (EA := EffectiveAddress.deserialize_att(width, mem_operand.lstrip())) is None:
+        width: bytes = tokens[0].lstrip()[len(insn.mnemonic) : len(insn.mnemonic) + 1]
+
+        while (
+            EA := EffectiveAddress.deserialize_att(width, mem_operand.lstrip())
+        ) is None:
             if b"," in mem_operand and not mem_operand.endswith(b","):
                 before_first_comma = mem_operand.split(b",")[0]
-                mem_operand = mem_operand[len(before_first_comma)+1:]
-            else: # No operands remaining
+                mem_operand = mem_operand[len(before_first_comma) + 1 :]
+            else:  # No operands remaining
                 assert False
         return EA
-        
-       
-    
+
     assert False
 
 
@@ -493,15 +492,11 @@ def cs_to_taint_idx(r: int) -> int:
 
 
 def generate_cmov_instrumentation(line: bytes, insn: CsInsn, config: Config) -> bytes:
-        instructions: list[Instruction] = [
+    instructions: list[Instruction] = [
         Instruction(b"pushfq"),
         Instruction(b"push", Register(b"rax")),
         Instruction(b"push", Register(b"rbx")),
-        Instruction(
-            b"lea",
-            Register(b"rbx"),
-            EffectiveAddress.deserialize_intel(get_memory_operand(line))
-        ),
+        Instruction(b"lea", Register(b"rbx"), get_memory_operand(line, insn)),
         Instruction(b"mov", Register(b"rax"), Register(b"rsp")),
         *(
             [
@@ -533,11 +528,13 @@ def generate_cmov_instrumentation(line: bytes, insn: CsInsn, config: Config) -> 
         Instruction(b"pop", Register(b"rbx")),
         Instruction(b"pop", Register(b"rax")),
         Instruction(b"popfq"),
-        ]
-        return b"\n".join(map(Instruction.serialize_intel, instructions)) + b"\n"
+    ]
+    return b"\n".join(map(Instruction.serialize_intel, instructions)) + b"\n"
 
 
-def generate_generic_memory_instrumentation(line: bytes, insn: CsInsn, config: Config) -> bytes:
+def generate_generic_memory_instrumentation(
+    line: bytes, insn: CsInsn, config: Config
+) -> bytes:
     instructions: list[Instruction] = [
         Instruction(b"pushfq"),
         Instruction(b"push", Register(b"rax")),
@@ -630,7 +627,7 @@ def generate_reg_taint_check(
                 EffectiveAddress(
                     offset=Label(b"abisan_taint_state"),
                     base=Register(b"rip"),
-                    displacement= cs_to_taint_idx(register_normalize(r))
+                    displacement=cs_to_taint_idx(register_normalize(r)),
                 ),
             ),
             Instruction(
@@ -671,7 +668,7 @@ def generate_reg_taint_check(
                 EffectiveAddress(
                     offset=Label(b"abisan_taint_state"),
                     base=Register(b"rip"),
-                    displacement=cs_to_taint_idx(register_normalize(r))
+                    displacement=cs_to_taint_idx(register_normalize(r)),
                 ),
             ),
             Instruction(
@@ -709,7 +706,7 @@ def generate_generic_reg_taint_update(r: int) -> bytes:
             EffectiveAddress(
                 offset=Label(b"abisan_taint_state"),
                 base=Register(b"rip"),
-                displacement=cs_to_taint_idx(register_normalize(r))
+                displacement=cs_to_taint_idx(register_normalize(r)),
             ),
         ),
         Instruction(
@@ -735,28 +732,21 @@ def generate_cmov_reg_taint_update(insn: CsInsn, r: int) -> bytes:
             EffectiveAddress(
                 offset=Label(b"abisan_taint_state"),
                 base=Register(b"rip"),
-                displacement=Immediate(
-                    str(cs_to_taint_idx(register_normalize(r))).encode("ascii")
-                )
-            )
+                displacement=cs_to_taint_idx(register_normalize(r)),
+            ),
         ),
         Instruction(
             b"mov",
             Register(b"bl"),
             EffectiveAddress(width=EAWidth.BYTE_PTR, base=Register(b"rax")),
         ),
-        Instruction(b"mov", 
-            Register(b"cl"), 
-            Register(b"bl")
-        ),
+        Instruction(b"mov", Register(b"cl"), Register(b"bl")),
         Instruction(
             b"and",
             Register(b"cl"),
             Immediate(str(bitwise_neg8(get_taint_mask(r))).encode("ascii")),
         ),
-        Instruction(
-            insn.mnemonic.encode("ascii"), Register(b"rbx"), Register(b"rcx")
-        ),
+        Instruction(insn.mnemonic.encode("ascii"), Register(b"rbx"), Register(b"rcx")),
         Instruction(
             b"mov",
             EffectiveAddress(width=EAWidth.BYTE_PTR, base=Register(b"rax")),
@@ -805,7 +795,11 @@ def main() -> None:
         )
         sys.exit(1)
 
-    tunables: [str] = [os.environ.get(REDZONE_ENABLED_ENV_NAME, ""), os.environ.get(STACK_SIZE_ENV_NAME, ""), os.environ.get(SYNTAX_ENV_NAME, "")]
+    tunables: list[str] = [
+        os.environ.get(REDZONE_ENABLED_ENV_NAME, ""),
+        os.environ.get(STACK_SIZE_ENV_NAME, ""),
+        os.environ.get(SYNTAX_ENV_NAME, ""),
+    ]
     config: Config = parse_tunable_envs(tunables)
 
     input_file_name: str = sys.argv[1]
@@ -860,7 +854,9 @@ def main() -> None:
                     if insn.mnemonic.startswith("cmov"):
                         f.write(generate_cmov_instrumentation(line, insn, config))
                     else:
-                        f.write(generate_generic_memory_instrumentation(line, insn, config))
+                        f.write(
+                            generate_generic_memory_instrumentation(line, insn, config)
+                        )
 
                 if needs_taint_check_for_read(insn):
                     for r in get_registers_read(insn):
