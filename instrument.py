@@ -86,6 +86,15 @@ def parse_tunable_envs(tunables: list[str]):
     return Config(redzone_enabled, stack_size, syntax)
 
 
+def serialize(instructions: list[Instruction], config: Config) -> bytes:
+    if config.syntax == "intel":
+        return b"\n".join(map(Instruction.serialize_intel, instructions)) + b"\n"
+    elif config.syntax == "att":
+        return b"\n".join(map(Instruction.serialize_att, instructions)) + b"\n"
+    else:
+        raise ValueError("Invalid syntax provided")
+
+
 def get_memory_operand(line: bytes, insn: CsInsn) -> EffectiveAddress | None:
 
     syntax = "intel"
@@ -491,7 +500,9 @@ def cs_to_taint_idx(r: int) -> int:
     sys.exit(1)
 
 
-def generate_cmov_instrumentation(line: bytes, insn: CsInsn, config: Config) -> bytes:
+def generate_cmov_instrumentation(
+    line: bytes, insn: CsInsn, config: Config
+) -> list[Instruction]:
     instructions: list[Instruction] = [
         Instruction(b"pushfq"),
         Instruction(b"push", Register(b"rax")),
@@ -529,12 +540,12 @@ def generate_cmov_instrumentation(line: bytes, insn: CsInsn, config: Config) -> 
         Instruction(b"pop", Register(b"rax")),
         Instruction(b"popfq"),
     ]
-    return b"\n".join(map(Instruction.serialize_intel, instructions)) + b"\n"
+    return instructions
 
 
 def generate_generic_memory_instrumentation(
     line: bytes, insn: CsInsn, config: Config
-) -> bytes:
+) -> list[Instruction]:
     instructions: list[Instruction] = [
         Instruction(b"pushfq"),
         Instruction(b"push", Register(b"rax")),
@@ -576,12 +587,12 @@ def generate_generic_memory_instrumentation(
         Instruction(b"popfq"),
     ]
 
-    return b"\n".join(map(Instruction.serialize_intel, instructions)) + b"\n"
+    return instructions
 
 
 def generate_reg_taint_check(
     line: bytes, insn: CsInsn, r: int, config: Config
-) -> bytes:
+) -> list[Instruction]:
     instructions: list[Instruction] = []
 
     if insn.op_count(capstone.CS_OP_MEM) > 0 and insn.mnemonic == "mov":
@@ -694,10 +705,10 @@ def generate_reg_taint_check(
             ),
         ]
 
-    return b"\n".join(map(Instruction.serialize_intel, instructions)) + b"\n"
+    return instructions
 
 
-def generate_generic_reg_taint_update(r: int) -> bytes:
+def generate_generic_reg_taint_update(r: int) -> list[Instruction]:
     instructions: list[Instruction] = [
         Instruction(b"push", Register(b"rax")),
         Instruction(
@@ -717,10 +728,10 @@ def generate_generic_reg_taint_update(r: int) -> bytes:
         Instruction(b"pop", Register(b"rax")),
     ]
 
-    return b"\n".join(map(Instruction.serialize_intel, instructions)) + b"\n"
+    return instructions
 
 
-def generate_cmov_reg_taint_update(insn: CsInsn, r: int) -> bytes:
+def generate_cmov_reg_taint_update(insn: CsInsn, r: int) -> list[Instruction]:
     instructions: list[Instruction] = [
         Instruction(b"push", Register(b"rax")),
         Instruction(b"push", Register(b"rbx")),
@@ -757,13 +768,13 @@ def generate_cmov_reg_taint_update(insn: CsInsn, r: int) -> bytes:
         Instruction(b"pop", Register(b"rbx")),
         Instruction(b"pop", Register(b"rax")),
     ]
-    return b"\n".join(map(Instruction.serialize_intel, instructions)) + b"\n"
+    return instructions
 
 
-def generate_taint_after_call() -> bytes:
+def generate_taint_after_call() -> list[Instruction]:
     # Taint everything that could have been clobbered in a call
 
-    instructions = [
+    instructions: list[Instruction] = [
         Instruction(b"push", Register(b"rdi")),
         Instruction(
             b"lea",
@@ -858,7 +869,7 @@ def generate_taint_after_call() -> bytes:
         Instruction(b"pop", Register(b"rdi")),
     ]
 
-    return b"\n".join(map(Instruction.serialize_intel, instructions)) + b"\n"
+    return instructions
 
 
 def main() -> None:
@@ -926,26 +937,42 @@ def main() -> None:
                 registers_written: set[int] = get_registers_written(insn)
                 if insn.op_count(capstone.CS_OP_MEM) > 0 and insn.mnemonic != "lea":
                     if insn.mnemonic.startswith("cmov"):
-                        f.write(generate_cmov_instrumentation(line, insn, config))
+                        f.write(
+                            serialize(
+                                generate_cmov_instrumentation(line, insn, config),
+                                config,
+                            )
+                        )
                     else:
                         f.write(
-                            generate_generic_memory_instrumentation(line, insn, config)
+                            serialize(
+                                generate_generic_memory_instrumentation(
+                                    line, insn, config
+                                ),
+                                config,
+                            )
                         )
 
                 if needs_taint_check_for_read(insn):
                     for r in get_registers_read(insn):
-                        f.write(generate_reg_taint_check(line, insn, r, config))
+                        f.write(
+                            serialize(
+                                generate_reg_taint_check(line, insn, r, config), config
+                            )
+                        )
 
                 for r in get_registers_written(insn):
                     if insn.mnemonic.startswith("cmov"):
-                        f.write(generate_cmov_reg_taint_update(insn, r))
+                        f.write(
+                            serialize(generate_cmov_reg_taint_update(insn, r), config)
+                        )
                     else:
-                        f.write(generate_generic_reg_taint_update(r))
+                        f.write(serialize(generate_generic_reg_taint_update(r), config))
 
             f.write(line + b"\n")
 
             if insn is not None and insn.mnemonic.startswith("call"):
-                f.write(generate_taint_after_call())
+                f.write(serialize(generate_taint_after_call(), config))
 
             if get_label_name(line) in global_symbols:
                 f.write(b"    call abisan_function_entry\n")
