@@ -23,11 +23,6 @@ def is_hexadecimal(num: bytes) -> bool:
 def is_register_att(reg: bytes) -> bool:
     return re.match(rb"\A%[0-9a-zA-Z]+\Z", reg) is not None
 
-
-def is_immediate_att(imm: bytes) -> bool:
-    return re.match(rb"\A\$(?:0[xX])?[0-9a-fA-F]+\Z", imm) is not None
-
-
 @dataclass
 class Register:
     val: bytes
@@ -216,8 +211,8 @@ class EffectiveAddress:
     def deserialize_att(
         width_string: bytes, memory_operand: bytes
     ) -> "EffectiveAddress | None":
+        
         width: EAWidth | None = None
-
         # No width
         if len(width_string) > 0:
             width = EAWidth.deserialize_att(width_string)
@@ -241,15 +236,15 @@ class EffectiveAddress:
         rightmost_comma_index: int
         rightmost_close_parenthesis_index: int
         memory_op_clean: bytes = b"".join(
-            memory_operand.split(b" ")
-        )  # How to also split on tabs
+            memory_operand.split(b" ") # How to also split on tabs?
+        )  
         while (rightmost_comma_index := memory_op_clean.rfind(b",")) > (
             rightmost_close_parenthesis_index := memory_op_clean.rfind(b")")
         ):
             memory_op_clean = memory_op_clean[:rightmost_comma_index]
 
         match memory_op_clean.split(b","):
-            # Cases may contain non-memory-operand prefixes
+            # Cases may contain non-memory operands before the memory operand
             # In att, it is generally not permitted to have more than one memory operand in a single instruction
 
             case [t1, t2, t3]:
@@ -260,11 +255,8 @@ class EffectiveAddress:
                 if not b"(" in t1:
                     return None
 
-                # Displacement and base:
-                # Separate Displacement from the base if it exists:
                 disp, t1 = t1.split(b"(")
 
-                # Displacement is not an immediate or register
                 # Displacement must be able to be a hexadecimal
                 # Base is a register
                 if (len(disp) > 0 and not is_hexadecimal(disp)) or not is_register_att(
@@ -278,7 +270,7 @@ class EffectiveAddress:
 
                 t3 = t3.strip(b")")
                 # Index is a register
-                # Scale is not a should be a hexadecimal, meaning it is not an immediate
+                # Scale is not an immediate; should be represented as hexadecimal
                 if not is_register_att(t2) or not is_hexadecimal(t3):
                     return None
 
@@ -297,8 +289,7 @@ class EffectiveAddress:
                 disp, t1 = t1.split(b"(")
                 t2 = t2.strip(b")")
 
-                # Displacement is not an immediate or register
-                # Displacement must be able to be a hexadecimal
+                # Displacement must be able to be a hexadecimal (not immediate)
                 # Base/Index is a register
                 if (len(disp) > 0 and not is_hexadecimal(disp)) or not is_register_att(
                     t1
@@ -307,10 +298,10 @@ class EffectiveAddress:
 
                 displacement = int(disp, 16) if len(disp) > 0 else None
 
-                if is_register_att(t2):
+                if is_register_att(t2): # displacement(%base, %index)
                     base = Register(t1)
                     index = Register(t2)
-                elif is_hexadecimal(t2):
+                elif is_hexadecimal(t2): # displacement(%index, scale)
                     index = Register(t1)
                     scale = int(t2, 16)
                 else:
@@ -341,17 +332,6 @@ class EffectiveAddress:
             case _:
                 return None
 
-        print(
-            "\nFOUND EA:",
-            "\nDisplacement:",
-            hex(displacement) if displacement is not None else None,
-            "\nBase:",
-            base,
-            "\nIndex:",
-            index,
-            "\nScale:",
-            scale,
-        )
         return EffectiveAddress(
             width=width, displacement=displacement, base=base, index=index, scale=scale
         )
