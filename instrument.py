@@ -102,7 +102,7 @@ def get_memory_operand(line: bytes, insn: CsInsn, config: Config) -> EffectiveAd
 
     mnemonic: bytes = tokens[0].lower()
     assert mnemonic != b"lea"
-
+    
     # TODO: Support single-quoted [ and ,.
     if config.syntax == "intel":
         for operand in (token.strip() for token in tokens[1].split(b",")):
