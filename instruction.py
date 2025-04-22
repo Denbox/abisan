@@ -17,6 +17,8 @@ def is_decimal(num: bytes) -> bool:
 def is_hexadecimal(num: bytes) -> bool:
     if num.startswith(b"0x") or num.startswith(b"0X"):
         num = num[2:]
+    if num.startswith(b"+0x") or num.startswith(b"-0x") or num.startswith(b"+0X") or num.startswith(b"-0X"):
+        num = num[3:]
     return all(c in b"0123456789abcedfABCDEF" for c in num)
 
 
@@ -139,6 +141,7 @@ class EffectiveAddress:
             ea_components.append(self.index.serialize_att())
         if self.scale is not None:
             ea_components.append(str(self.scale).encode("ascii"))
+        result += b"("
         result += b",".join(ea_components)
         result += b")"
         return result
@@ -332,6 +335,12 @@ class EffectiveAddress:
             case _:
                 return None
 
+        # Registers will have leading "%", which we must strip
+        if base is not None:
+            base.val = base.val.strip(b"%")
+        if index is not None:
+            index.val = index.val.strip(b"%")
+
         return EffectiveAddress(
             width=width, displacement=displacement, base=base, index=index, scale=scale
         )
@@ -376,7 +385,7 @@ class Instruction:
     def serialize_att(self) -> bytes:
         mnemonic: bytes = self.mnemonic
         for op in self.operands:
-            if isinstance(op, EffectiveAddress) and op.width is not None:
+            if isinstance(op, EffectiveAddress) and op.width is not None and not b"lea" in mnemonic:
                 # If an instruction has 2 EA operands, this will be intentionally wrong, and shouldn't assemble.
                 mnemonic += op.width.serialize_att()
         return (
