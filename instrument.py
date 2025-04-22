@@ -86,7 +86,7 @@ def parse_tunable_envs(tunables: list[str]):
     return Config(redzone_enabled, stack_size, syntax)
 
 
-def get_memory_operand(line: bytes, insn: CsInsn) -> EffectiveAddress:
+def get_memory_operand(line: bytes, insn: CsInsn) -> EffectiveAddress | None:
 
     syntax = "intel"
     tokens: list[bytes] = line.split(maxsplit=1)
@@ -762,29 +762,103 @@ def generate_cmov_reg_taint_update(insn: CsInsn, r: int) -> bytes:
 
 def generate_taint_after_call() -> bytes:
     # Taint everything that could have been clobbered in a call
-    return (
-        b"\n".join(
-            (
-                b"    push rdi",
-                b"    lea rdi, byte ptr offset abisan_taint_state[rip]",
-                f"    mov byte ptr [rdi + {TAINT_STATE_RAX}], 0".encode(
-                    "ascii"
-                ),  # TODO: This should be tainted for void functions
-                f"    mov byte ptr [rdi + {TAINT_STATE_RCX}], 0xff".encode("ascii"),
-                f"    mov byte ptr [rdi + {TAINT_STATE_RDX}], 0xff".encode(
-                    "ascii"
-                ),  # TODO: This shouldn't be tainted for functions that return in rdx:rax
-                f"    mov byte ptr [rdi + {TAINT_STATE_RDI}], 0xff".encode("ascii"),
-                f"    mov byte ptr [rdi + {TAINT_STATE_RSI}], 0xff".encode("ascii"),
-                f"    mov byte ptr [rdi + {TAINT_STATE_R8}], 0xff".encode("ascii"),
-                f"    mov byte ptr [rdi + {TAINT_STATE_R9}], 0xff".encode("ascii"),
-                f"    mov byte ptr [rdi + {TAINT_STATE_R10}], 0xff".encode("ascii"),
-                f"    mov byte ptr [rdi + {TAINT_STATE_R11}], 0xff".encode("ascii"),
-                b"    pop rdi",
-            )
-        )
-        + b"\n"
-    )
+
+    instructions = [
+        Instruction(b"push", Register(b"rdi")),
+        Instruction(
+            b"lea",
+            Register(b"rdi"),
+            EffectiveAddress(
+                width=EAWidth.BYTE_PTR,
+                base=Register(b"rip"),
+                offset=Label(b"abisan_taint_state"),
+            ),
+        ),
+        Instruction(
+            b"mov",
+            EffectiveAddress(
+                width=EAWidth.BYTE_PTR,
+                base=Register(b"rdi"),
+                displacement=TAINT_STATE_RAX,
+            ),
+            Immediate(b"0"),
+        ),
+        Instruction(
+            b"mov",
+            EffectiveAddress(
+                width=EAWidth.BYTE_PTR,
+                base=Register(b"rdi"),
+                displacement=TAINT_STATE_RCX,
+            ),
+            Immediate(b"0xff"),
+        ),
+        Instruction(
+            b"mov",
+            EffectiveAddress(
+                width=EAWidth.BYTE_PTR,
+                base=Register(b"rdi"),
+                displacement=TAINT_STATE_RDX,
+            ),
+            Immediate(b"0xff"),
+        ),
+        Instruction(
+            b"mov",
+            EffectiveAddress(
+                width=EAWidth.BYTE_PTR,
+                base=Register(b"rdi"),
+                displacement=TAINT_STATE_RDI,
+            ),
+            Immediate(b"0xff"),
+        ),
+        Instruction(
+            b"mov",
+            EffectiveAddress(
+                width=EAWidth.BYTE_PTR,
+                base=Register(b"rdi"),
+                displacement=TAINT_STATE_RSI,
+            ),
+            Immediate(b"0xff"),
+        ),
+        Instruction(
+            b"mov",
+            EffectiveAddress(
+                width=EAWidth.BYTE_PTR,
+                base=Register(b"rdi"),
+                displacement=TAINT_STATE_R8,
+            ),
+            Immediate(b"0xff"),
+        ),
+        Instruction(
+            b"mov",
+            EffectiveAddress(
+                width=EAWidth.BYTE_PTR,
+                base=Register(b"rdi"),
+                displacement=TAINT_STATE_R9,
+            ),
+            Immediate(b"0xff"),
+        ),
+        Instruction(
+            b"mov",
+            EffectiveAddress(
+                width=EAWidth.BYTE_PTR,
+                base=Register(b"rdi"),
+                displacement=TAINT_STATE_R10,
+            ),
+            Immediate(b"0xff"),
+        ),
+        Instruction(
+            b"mov",
+            EffectiveAddress(
+                width=EAWidth.BYTE_PTR,
+                base=Register(b"rdi"),
+                displacement=TAINT_STATE_R11,
+            ),
+            Immediate(b"0xff"),
+        ),
+        Instruction(b"pop", Register(b"rdi")),
+    ]
+
+    return b"\n".join(map(Instruction.serialize_intel, instructions)) + b"\n"
 
 
 def main() -> None:

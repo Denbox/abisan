@@ -19,11 +19,14 @@ def is_hexadecimal(num: bytes) -> bool:
         num = num[2:]
     return all(c in b"0123456789abcedfABCDEF" for c in num)
 
+
 def is_register_att(reg: bytes) -> bool:
-    return (re.match(rb"\A%[0-9a-zA-Z]+\Z", reg) is not None)
+    return re.match(rb"\A%[0-9a-zA-Z]+\Z", reg) is not None
+
 
 def is_immediate_att(imm: bytes) -> bool:
-    return (re.match(rb"\A\$(?:0[xX])?[0-9a-fA-F]+\Z", imm) is not None)
+    return re.match(rb"\A\$(?:0[xX])?[0-9a-fA-F]+\Z", imm) is not None
+
 
 @dataclass
 class Register:
@@ -160,7 +163,9 @@ class EffectiveAddress:
         # TODO: Handle rip relative movs like: offset label[rip + immediate]
         width_key: bytes = ea_match["width"].strip(b" \t")
 
-        width: EAWidth | None = EAWidth.deserialize_intel(width_key) if len(width_key) > 0 else None
+        width: EAWidth | None = (
+            EAWidth.deserialize_intel(width_key) if len(width_key) > 0 else None
+        )
 
         offset: bytes = b"".join(ea_match["offset"].strip(b" \t").split())
 
@@ -208,13 +213,14 @@ class EffectiveAddress:
         )
 
     @staticmethod
-    def deserialize_att(width_string: bytes,memory_operand: bytes) -> "EffectiveAddress":
+    def deserialize_att(
+        width_string: bytes, memory_operand: bytes
+    ) -> "EffectiveAddress | None":
         width: EAWidth | None = None
 
         # No width
         if len(width_string) > 0:
             width = EAWidth.deserialize_att(width_string)
-      
 
         # Displacement may have to be an int
         displacement: int | None = None
@@ -231,22 +237,21 @@ class EffectiveAddress:
         # displacement(%index,scale)
         # (%base,%index,scale)
 
-
-      
         # Remove trailing operands
         rightmost_comma_index: int
         rightmost_close_parenthesis_index: int
-        memory_op_clean: bytes = b"".join(memory_operand.split(b" ")) # How to also split on tabs 
-        while (
-                (rightmost_comma_index := memory_op_clean.rfind(b",")) >
-                (rightmost_close_parenthesis_index := memory_op_clean.rfind(b")"))
+        memory_op_clean: bytes = b"".join(
+            memory_operand.split(b" ")
+        )  # How to also split on tabs
+        while (rightmost_comma_index := memory_op_clean.rfind(b",")) > (
+            rightmost_close_parenthesis_index := memory_op_clean.rfind(b")")
         ):
-            memory_op_clean = memory_op_clean[: rightmost_comma_index]
+            memory_op_clean = memory_op_clean[:rightmost_comma_index]
 
         match memory_op_clean.split(b","):
             # Cases may contain non-memory-operand prefixes
             # In att, it is generally not permitted to have more than one memory operand in a single instruction
-            
+
             case [t1, t2, t3]:
                 # Contains:
                 # (%base,%index,scale)
@@ -262,35 +267,29 @@ class EffectiveAddress:
                 # Displacement is not an immediate or register
                 # Displacement must be able to be a hexadecimal
                 # Base is a register
-                if (
-                        (len(disp) > 0 and not is_hexadecimal(disp))
-                        or not is_register_att(t1)
-                ): 
+                if (len(disp) > 0 and not is_hexadecimal(disp)) or not is_register_att(
+                    t1
+                ):
                     return None
 
                 displacement = int(disp, 16) if len(disp) > 0 else None
 
                 base = Register(t1)
 
-                
                 t3 = t3.strip(b")")
                 # Index is a register
                 # Scale is not a should be a hexadecimal, meaning it is not an immediate
-                if (
-                        not is_register_att(t2)
-                        or not is_hexadecimal(t3)
-                ):
+                if not is_register_att(t2) or not is_hexadecimal(t3):
                     return None
 
                 index = Register(t2)
                 scale = int(t3, 16)
 
-                
             case [t1, t2]:
                 # Contains:
                 # displacement(%base,%index)
                 # displacement(%index,scale)
-                
+
                 if not b"(" in t1:
                     return None
 
@@ -301,10 +300,9 @@ class EffectiveAddress:
                 # Displacement is not an immediate or register
                 # Displacement must be able to be a hexadecimal
                 # Base/Index is a register
-                if (
-                        (len(disp) > 0 and not is_hexadecimal(disp))
-                        or not is_register_att(t1)
-                ): 
+                if (len(disp) > 0 and not is_hexadecimal(disp)) or not is_register_att(
+                    t1
+                ):
                     return None
 
                 displacement = int(disp, 16) if len(disp) > 0 else None
@@ -317,15 +315,14 @@ class EffectiveAddress:
                     scale = int(t2, 16)
                 else:
                     return None
-                
-                    
+
             case [t1]:
                 # Contains:
                 # (%base)
                 # displacement
                 # displacement(%base)
-                
-                disp: bytes = b""
+
+                disp = b""
                 if b"(" in t1:
                     disp, t1 = t1.split(b"(")
                     t1 = t1.strip(b")")
@@ -336,24 +333,25 @@ class EffectiveAddress:
                 else:
                     disp = t1
 
-                    
-                if (len(disp) > 0 and not is_hexadecimal(disp)):
+                if len(disp) > 0 and not is_hexadecimal(disp):
                     return None
-                
+
                 displacement = int(disp, 16) if len(disp) > 0 else None
-                
-                
+
             case _:
                 return None
-           
-            
 
-        print("\nFOUND EA:",
-                  "\nDisplacement:", hex(displacement) if displacement is not None else None,
-                  "\nBase:", base,
-                  "\nIndex:", index,
-                  "\nScale:", scale
-              )
+        print(
+            "\nFOUND EA:",
+            "\nDisplacement:",
+            hex(displacement) if displacement is not None else None,
+            "\nBase:",
+            base,
+            "\nIndex:",
+            index,
+            "\nScale:",
+            scale,
+        )
         return EffectiveAddress(
             width=width, displacement=displacement, base=base, index=index, scale=scale
         )
@@ -377,7 +375,10 @@ class JumpTarget:
 def is_valid_operand_list(
     operands: list[object],
 ) -> TypeGuard[list[Register | Immediate | Label | EffectiveAddress | JumpTarget]]:
-    return all(isinstance(op, (Register, Immediate, Label, EffectiveAddress, JumpTarget)) for op in operands)
+    return all(
+        isinstance(op, (Register, Immediate, Label, EffectiveAddress, JumpTarget))
+        for op in operands
+    )
 
 
 @dataclass
