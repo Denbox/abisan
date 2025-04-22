@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-
+export ABISAN_TUNABLES_SYNTAX="intel"
 for t in tests/*; do
     if [[ "$t" == *"att"* ]]; then
         export ABISAN_TUNABLES_SYNTAX="att"
