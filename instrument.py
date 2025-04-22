@@ -95,24 +95,22 @@ def serialize(instructions: list[Instruction], config: Config) -> bytes:
         raise ValueError("Invalid syntax provided")
 
 
-def get_memory_operand(line: bytes, insn: CsInsn) -> EffectiveAddress | None:
+def get_memory_operand(line: bytes, insn: CsInsn, config: Config) -> EffectiveAddress | None:
 
-    syntax = "intel"
     tokens: list[bytes] = line.split(maxsplit=1)
     assert len(tokens) == 2
 
     mnemonic: bytes = tokens[0].lower()
     assert mnemonic != b"lea"
 
-    # TODO: Support AT&T syntax
     # TODO: Support single-quoted [ and ,.
-    if "intel" in syntax:
+    if config.syntax == "intel":
         for operand in (token.strip() for token in tokens[1].split(b",")):
             if b"[" in operand:
                 return EffectiveAddress.deserialize_intel(operand)
-    elif "att" in syntax:
+    elif config.syntax == "att":
         # Remove mnemonic
-        # Starting left to right, try and parse as a memory operand, if we reach the potential end of an operand, yay!
+        # Starting left to right, try and parse as a memory operand, if we reach the potential memory operand, yay!
         # Otherwise, consume everything up until the next comma
 
         mem_operand: bytes = line.lstrip()[len(mnemonic) :]
@@ -507,7 +505,7 @@ def generate_cmov_instrumentation(
         Instruction(b"pushfq"),
         Instruction(b"push", Register(b"rax")),
         Instruction(b"push", Register(b"rbx")),
-        Instruction(b"lea", Register(b"rbx"), get_memory_operand(line, insn)),
+        Instruction(b"lea", Register(b"rbx"), get_memory_operand(line, insn, config)),
         Instruction(b"mov", Register(b"rax"), Register(b"rsp")),
         *(
             [
@@ -553,7 +551,7 @@ def generate_generic_memory_instrumentation(
         Instruction(
             b"lea",
             Register(b"rax"),
-            get_memory_operand(line, insn),
+            get_memory_operand(line, insn, config),
         ),
         *(
             [
@@ -614,7 +612,7 @@ def generate_reg_taint_check(
             Instruction(
                 b"lea",
                 Register(b"rbx"),
-                get_memory_operand(line, insn),
+                get_memory_operand(line, insn, config),
             ),
             Instruction(
                 insn.mnemonic.encode("ascii"), Register(b"rax"), Register(b"rbx")
