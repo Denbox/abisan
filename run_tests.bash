@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+start_syntax="${ABISAN_TUNABLES_SYNTAX:-}"
+
 export ABISAN_TUNABLES_SYNTAX="intel"
 for t in tests/*; do
     if [[ "$t" == *"att"* ]]; then
@@ -16,5 +18,9 @@ for t in tests/*; do
 	popd
 done
 
-unset ABISAN_TUNABLES_SYNTAX
+if [[ "$start_syntax" == "" ]]; then
+    unset ABISAN_TUNABLES_SYNTAX
+else
+    export ABISAN_TUNABLES_SYNTAX=$start_syntax
+fi
 echo -e "\e[32mAll tests ran as expected\e[0m"
