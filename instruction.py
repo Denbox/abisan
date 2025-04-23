@@ -13,14 +13,8 @@ import re
 def is_decimal(num: bytes) -> bool:
     return num.isdigit()
 
-
 def is_hexadecimal(num: bytes) -> bool:
-    if num.startswith(b"0x") or num.startswith(b"0X"):
-        num = num[2:]
-    if num.startswith(b"+0x") or num.startswith(b"-0x") or num.startswith(b"+0X") or num.startswith(b"-0X"):
-        num = num[3:]
-    return all(c in b"0123456789abcedfABCDEF" for c in num)
-
+    return re.match(rb"\A[-+]?(?:0[xX])?[0-9a-fA-F]+\Z", num) is not None
 
 def is_register_att(reg: bytes) -> bool:
     return re.match(rb"\A%[0-9a-zA-Z]+\Z", reg) is not None
