@@ -133,7 +133,9 @@ class EffectiveAddress:
         if self.displacement is not None:
             result += str(self.displacement).encode("ascii")
         if self.offset is not None:
-            result += b"+" + self.offset.serialize_att()
+            if self.displacement is not None:
+                result += b"+"
+            result += self.offset.serialize_att()
         ea_components: list[bytes] = []
         if self.base is not None:
             ea_components.append(self.base.serialize_att())
