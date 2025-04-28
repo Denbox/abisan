@@ -126,7 +126,6 @@ def get_memory_operand(line: bytes, insn: CsInsn, config: Config) -> EffectiveAd
             else:  # No operands remaining
                 assert False
         return EA
-   
     assert False
 
 
