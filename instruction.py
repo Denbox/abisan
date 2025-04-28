@@ -311,23 +311,32 @@ class EffectiveAddress:
                 # (%base)
                 # displacement
                 # displacement(%base)
+                # offset(%base = %rip)
 
-                disp = b""
+                disp_or_offset: bytes = b""
                 if b"(" in t1:
-                    disp, t1 = t1.split(b"(")
+                    disp_or_offset, t1 = t1.split(b"(")
                     t1 = t1.strip(b")")
 
                     if not is_register_att(t1):
                         return None
                     base = Register(t1)
                 else:
-                    disp = t1
+                    disp_or_offset = t1
 
-                if len(disp) > 0 and not is_hexadecimal(disp):
+                # displacment or offset will never be a register or immediate
+                if len(disp_or_offset) > 0 and (is_register_att(disp_or_offset) or disp_or_offset.startswith(b"$")):
                     return None
 
-                displacement = int(disp, 16) if len(disp) > 0 else None
-
+                if len(disp_or_offset) > 0:
+                    if is_hexadecimal(disp_or_offset) and len(disp_or_offset):
+                        displacement = int(disp_or_offset, 16)
+                    else:
+                        offset = Label(disp_or_offset)
+                else:
+                    displacement = None
+                    
+               
             case _:
                 return None
 
