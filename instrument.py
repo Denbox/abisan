@@ -46,6 +46,9 @@ STACK_SIZE_ENV_NAME: str = "ABISAN_TUNABLES_STACK_SIZE"
 SYNTAX_ENV_NAME: str = "ABISAN_TUNABLES_SYNTAX"
 NUM_ENVS: int = 3
 
+# Non-crucial fluff created by compilers besides gcc which is not supported in the gnu assembler
+AS_UNSUPPORTED: list[bytes] = [b".addrsig"]
+
 
 @dataclasses.dataclass
 class Config:
@@ -95,19 +98,33 @@ def serialize(instructions: list[Instruction], config: Config) -> bytes:
         raise ValueError("Invalid syntax provided")
 
 
-def get_memory_operand(line: bytes, insn: CsInsn, config: Config) -> EffectiveAddress | None:
+# TODO: EA.deserialize_intel() should take width and operand as separate args
+def get_memory_operand(
+    line: bytes, insn: CsInsn, config: Config
+) -> EffectiveAddress | None:
 
     tokens: list[bytes] = line.split(maxsplit=1)
     assert len(tokens) == 2
 
     mnemonic: bytes = tokens[0].lower()
     assert mnemonic != b"lea"
-    
+
     # TODO: Support single-quoted [ and ,.
     if config.syntax == "intel":
         for operand in (token.strip() for token in tokens[1].split(b",")):
             if b"[" in operand:
-                return EffectiveAddress.deserialize_intel(operand)
+                ea_match: re.Match[bytes] | None = re.match(
+                    rb"(?P<width>[^\[]*)\[(?P<offset>[^\]]*)\]", operand
+                )
+                if ea_match is None:
+                    raise ValueError(
+                        "Invalid intel memory operand: " + operand.decode("ascii")
+                    )
+
+                return EffectiveAddress.deserialize_intel(
+                    ea_match["width"], ea_match["offset"]
+                )
+
     elif config.syntax == "att":
         # Remove mnemonic
         # Starting left to right, try and parse as a memory operand, if we reach the potential memory operand, yay!
@@ -544,240 +561,155 @@ def register_normalize(r: int) -> int:
         ):
             return x86_const.X86_REG_RSP
 
-        case (
-                x86_const.X86_REG_ZMM0
-                | x86_const.X86_REG_YMM0
-                | x86_const.X86_REG_XMM0
-        ):
+        case x86_const.X86_REG_ZMM0 | x86_const.X86_REG_YMM0 | x86_const.X86_REG_XMM0:
             return x86_const.X86_REG_ZMM0
 
-        case (
-                x86_const.X86_REG_ZMM1
-                | x86_const.X86_REG_YMM1
-                | x86_const.X86_REG_XMM1
-        ):
+        case x86_const.X86_REG_ZMM1 | x86_const.X86_REG_YMM1 | x86_const.X86_REG_XMM1:
             return x86_const.X86_REG_ZMM1
 
-        case (
-                x86_const.X86_REG_ZMM2
-                | x86_const.X86_REG_YMM2
-                | x86_const.X86_REG_XMM2
-        ):
+        case x86_const.X86_REG_ZMM2 | x86_const.X86_REG_YMM2 | x86_const.X86_REG_XMM2:
             return x86_const.X86_REG_ZMM2
 
-        case (
-                x86_const.X86_REG_ZMM3
-                | x86_const.X86_REG_YMM3
-                | x86_const.X86_REG_XMM3
-        ):
+        case x86_const.X86_REG_ZMM3 | x86_const.X86_REG_YMM3 | x86_const.X86_REG_XMM3:
             return x86_const.X86_REG_ZMM3
 
-        case (
-                x86_const.X86_REG_ZMM4
-                | x86_const.X86_REG_YMM4
-                | x86_const.X86_REG_XMM4
-        ):
+        case x86_const.X86_REG_ZMM4 | x86_const.X86_REG_YMM4 | x86_const.X86_REG_XMM4:
             return x86_const.X86_REG_ZMM4
 
-        case (
-                x86_const.X86_REG_ZMM5
-                | x86_const.X86_REG_YMM5
-                | x86_const.X86_REG_XMM5
-        ):
+        case x86_const.X86_REG_ZMM5 | x86_const.X86_REG_YMM5 | x86_const.X86_REG_XMM5:
             return x86_const.X86_REG_ZMM5
 
-        case (
-                x86_const.X86_REG_ZMM6
-                | x86_const.X86_REG_YMM6
-                | x86_const.X86_REG_XMM6
-        ):
+        case x86_const.X86_REG_ZMM6 | x86_const.X86_REG_YMM6 | x86_const.X86_REG_XMM6:
             return x86_const.X86_REG_ZMM6
 
-        case (
-                x86_const.X86_REG_ZMM7
-                | x86_const.X86_REG_YMM7
-                | x86_const.X86_REG_XMM7
-        ):
+        case x86_const.X86_REG_ZMM7 | x86_const.X86_REG_YMM7 | x86_const.X86_REG_XMM7:
             return x86_const.X86_REG_ZMM7
 
-        case (
-                x86_const.X86_REG_ZMM8
-                | x86_const.X86_REG_YMM8
-                | x86_const.X86_REG_XMM8
-        ):
+        case x86_const.X86_REG_ZMM8 | x86_const.X86_REG_YMM8 | x86_const.X86_REG_XMM8:
             return x86_const.X86_REG_ZMM8
 
-        case (
-                x86_const.X86_REG_ZMM9
-                | x86_const.X86_REG_YMM9
-                | x86_const.X86_REG_XMM9
-        ):
+        case x86_const.X86_REG_ZMM9 | x86_const.X86_REG_YMM9 | x86_const.X86_REG_XMM9:
             return x86_const.X86_REG_ZMM9
-        
+
         case (
-                x86_const.X86_REG_ZMM10
-                | x86_const.X86_REG_YMM10
-                | x86_const.X86_REG_XMM10
+            x86_const.X86_REG_ZMM10 | x86_const.X86_REG_YMM10 | x86_const.X86_REG_XMM10
         ):
             return x86_const.X86_REG_ZMM10
-        
+
         case (
-                x86_const.X86_REG_ZMM11
-                | x86_const.X86_REG_YMM11
-                | x86_const.X86_REG_XMM11
+            x86_const.X86_REG_ZMM11 | x86_const.X86_REG_YMM11 | x86_const.X86_REG_XMM11
         ):
             return x86_const.X86_REG_ZMM11
-        
+
         case (
-                x86_const.X86_REG_ZMM12
-                | x86_const.X86_REG_YMM12
-                | x86_const.X86_REG_XMM12
+            x86_const.X86_REG_ZMM12 | x86_const.X86_REG_YMM12 | x86_const.X86_REG_XMM12
         ):
             return x86_const.X86_REG_ZMM12
-        
+
         case (
-                x86_const.X86_REG_ZMM13
-                | x86_const.X86_REG_YMM13
-                | x86_const.X86_REG_XMM13
+            x86_const.X86_REG_ZMM13 | x86_const.X86_REG_YMM13 | x86_const.X86_REG_XMM13
         ):
             return x86_const.X86_REG_ZMM13
-        
+
         case (
-                x86_const.X86_REG_ZMM14
-                | x86_const.X86_REG_YMM14
-                | x86_const.X86_REG_XMM14
+            x86_const.X86_REG_ZMM14 | x86_const.X86_REG_YMM14 | x86_const.X86_REG_XMM14
         ):
             return x86_const.X86_REG_ZMM14
-        
+
         case (
-                x86_const.X86_REG_ZMM15
-                | x86_const.X86_REG_YMM15
-                | x86_const.X86_REG_XMM15
+            x86_const.X86_REG_ZMM15 | x86_const.X86_REG_YMM15 | x86_const.X86_REG_XMM15
         ):
             return x86_const.X86_REG_ZMM15
-        
+
         case (
-                x86_const.X86_REG_ZMM16
-                | x86_const.X86_REG_YMM16
-                | x86_const.X86_REG_XMM16
+            x86_const.X86_REG_ZMM16 | x86_const.X86_REG_YMM16 | x86_const.X86_REG_XMM16
         ):
             return x86_const.X86_REG_ZMM16
-        
+
         case (
-                x86_const.X86_REG_ZMM17
-                | x86_const.X86_REG_YMM17
-                | x86_const.X86_REG_XMM17
+            x86_const.X86_REG_ZMM17 | x86_const.X86_REG_YMM17 | x86_const.X86_REG_XMM17
         ):
             return x86_const.X86_REG_ZMM17
-        
+
         case (
-                x86_const.X86_REG_ZMM18
-                | x86_const.X86_REG_YMM18
-                | x86_const.X86_REG_XMM18
+            x86_const.X86_REG_ZMM18 | x86_const.X86_REG_YMM18 | x86_const.X86_REG_XMM18
         ):
             return x86_const.X86_REG_ZMM18
-        
+
         case (
-                x86_const.X86_REG_ZMM19
-                | x86_const.X86_REG_YMM19
-                | x86_const.X86_REG_XMM19
+            x86_const.X86_REG_ZMM19 | x86_const.X86_REG_YMM19 | x86_const.X86_REG_XMM19
         ):
             return x86_const.X86_REG_ZMM19
-        
+
         case (
-                x86_const.X86_REG_ZMM20
-                | x86_const.X86_REG_YMM20
-                | x86_const.X86_REG_XMM20
+            x86_const.X86_REG_ZMM20 | x86_const.X86_REG_YMM20 | x86_const.X86_REG_XMM20
         ):
             return x86_const.X86_REG_ZMM20
-        
+
         case (
-                x86_const.X86_REG_ZMM21
-                | x86_const.X86_REG_YMM21
-                | x86_const.X86_REG_XMM21
+            x86_const.X86_REG_ZMM21 | x86_const.X86_REG_YMM21 | x86_const.X86_REG_XMM21
         ):
             return x86_const.X86_REG_ZMM21
-        
+
         case (
-                x86_const.X86_REG_ZMM22
-                | x86_const.X86_REG_YMM22
-                | x86_const.X86_REG_XMM22
+            x86_const.X86_REG_ZMM22 | x86_const.X86_REG_YMM22 | x86_const.X86_REG_XMM22
         ):
             return x86_const.X86_REG_ZMM22
-        
+
         case (
-                x86_const.X86_REG_ZMM23
-                | x86_const.X86_REG_YMM23
-                | x86_const.X86_REG_XMM23
+            x86_const.X86_REG_ZMM23 | x86_const.X86_REG_YMM23 | x86_const.X86_REG_XMM23
         ):
             return x86_const.X86_REG_ZMM23
-        
+
         case (
-                x86_const.X86_REG_ZMM24
-                | x86_const.X86_REG_YMM24
-                | x86_const.X86_REG_XMM24
+            x86_const.X86_REG_ZMM24 | x86_const.X86_REG_YMM24 | x86_const.X86_REG_XMM24
         ):
             return x86_const.X86_REG_ZMM24
-        
+
         case (
-                x86_const.X86_REG_ZMM25
-                | x86_const.X86_REG_YMM25
-                | x86_const.X86_REG_XMM25
+            x86_const.X86_REG_ZMM25 | x86_const.X86_REG_YMM25 | x86_const.X86_REG_XMM25
         ):
             return x86_const.X86_REG_ZMM25
-        
+
         case (
-                x86_const.X86_REG_ZMM26
-                | x86_const.X86_REG_YMM26
-                | x86_const.X86_REG_XMM26
+            x86_const.X86_REG_ZMM26 | x86_const.X86_REG_YMM26 | x86_const.X86_REG_XMM26
         ):
             return x86_const.X86_REG_ZMM26
-        
+
         case (
-                x86_const.X86_REG_ZMM27
-                | x86_const.X86_REG_YMM27
-                | x86_const.X86_REG_XMM27
+            x86_const.X86_REG_ZMM27 | x86_const.X86_REG_YMM27 | x86_const.X86_REG_XMM27
         ):
             return x86_const.X86_REG_ZMM27
-        
+
         case (
-                x86_const.X86_REG_ZMM28
-                | x86_const.X86_REG_YMM28
-                | x86_const.X86_REG_XMM28
+            x86_const.X86_REG_ZMM28 | x86_const.X86_REG_YMM28 | x86_const.X86_REG_XMM28
         ):
             return x86_const.X86_REG_ZMM28
-        
+
         case (
-                x86_const.X86_REG_ZMM29
-                | x86_const.X86_REG_YMM29
-                | x86_const.X86_REG_XMM29
+            x86_const.X86_REG_ZMM29 | x86_const.X86_REG_YMM29 | x86_const.X86_REG_XMM29
         ):
             return x86_const.X86_REG_ZMM29
-        
+
         case (
-                x86_const.X86_REG_ZMM30
-                | x86_const.X86_REG_YMM30
-                | x86_const.X86_REG_XMM30
+            x86_const.X86_REG_ZMM30 | x86_const.X86_REG_YMM30 | x86_const.X86_REG_XMM30
         ):
             return x86_const.X86_REG_ZMM30
-        
+
         case (
-                x86_const.X86_REG_ZMM31
-                | x86_const.X86_REG_YMM31
-                | x86_const.X86_REG_XMM31
+            x86_const.X86_REG_ZMM31 | x86_const.X86_REG_YMM31 | x86_const.X86_REG_XMM31
         ):
             return x86_const.X86_REG_ZMM31
 
-        
         case x86_const.X86_REG_IP | x86_const.X86_REG_EIP | x86_const.X86_REG_RIP:
             return x86_const.X86_REG_RIP
 
         case x86_const.X86_REG_EFLAGS:
             return x86_const.X86_REG_EFLAGS
 
-       
-
-    print(f"Unsupported register {cs.reg_name(r)} in register_normalize", file=sys.stderr)
+    print(
+        f"Unsupported register {cs.reg_name(r)} in register_normalize", file=sys.stderr
+    )
     sys.exit(1)
 
 
@@ -816,70 +748,69 @@ def cs_to_taint_idx(r: int) -> int:
         case x86_const.X86_REG_EFLAGS:
             return 15
         case x86_const.X86_REG_ZMM0:
-            return 16;
+            return 16
         case x86_const.X86_REG_ZMM1:
-            return 17;
+            return 17
         case x86_const.X86_REG_ZMM2:
-            return 18;
+            return 18
         case x86_const.X86_REG_ZMM3:
-            return 19;
+            return 19
         case x86_const.X86_REG_ZMM4:
-            return 20;
+            return 20
         case x86_const.X86_REG_ZMM5:
-            return 21;
+            return 21
         case x86_const.X86_REG_ZMM6:
-            return 22;
+            return 22
         case x86_const.X86_REG_ZMM7:
-            return 23;
+            return 23
         case x86_const.X86_REG_ZMM8:
-            return 24;
+            return 24
         case x86_const.X86_REG_ZMM9:
-            return 25;
+            return 25
         case x86_const.X86_REG_ZMM10:
-            return 26;
+            return 26
         case x86_const.X86_REG_ZMM11:
-            return 27;
+            return 27
         case x86_const.X86_REG_ZMM12:
-            return 28;
+            return 28
         case x86_const.X86_REG_ZMM13:
-            return 29;
+            return 29
         case x86_const.X86_REG_ZMM14:
-            return 30;
+            return 30
         case x86_const.X86_REG_ZMM15:
-            return 31;
+            return 31
         case x86_const.X86_REG_ZMM16:
-            return 32;
+            return 32
         case x86_const.X86_REG_ZMM17:
-            return 33;
+            return 33
         case x86_const.X86_REG_ZMM18:
-            return 34;
+            return 34
         case x86_const.X86_REG_ZMM19:
-            return 35;
+            return 35
         case x86_const.X86_REG_ZMM20:
-            return 36;
+            return 36
         case x86_const.X86_REG_ZMM21:
-            return 37;
+            return 37
         case x86_const.X86_REG_ZMM22:
-            return 38;
+            return 38
         case x86_const.X86_REG_ZMM23:
-            return 39;
+            return 39
         case x86_const.X86_REG_ZMM24:
-            return 40;
+            return 40
         case x86_const.X86_REG_ZMM25:
-            return 41;
+            return 41
         case x86_const.X86_REG_ZMM26:
-            return 42;
+            return 42
         case x86_const.X86_REG_ZMM27:
-            return 43;
+            return 43
         case x86_const.X86_REG_ZMM28:
-            return 44;
+            return 44
         case x86_const.X86_REG_ZMM29:
-            return 45;
+            return 45
         case x86_const.X86_REG_ZMM30:
-            return 46;
+            return 46
         case x86_const.X86_REG_ZMM31:
-            return 47;
-
+            return 47
 
     print(f"Unsupported register {cs.reg_name(r)} in cs_to_taint_idx", file=sys.stderr)
     sys.exit(1)
@@ -1292,7 +1223,10 @@ def main() -> None:
                 label_name: bytes = f"abisan_intermediate_{i}".encode("ascii")
                 f.write(label_name + b":\n")
                 instruction_line_numbers[label_name] = i
-            f.write(line + b"\n")
+
+            # Remove unnecessary additions by non gcc compilers
+            if not any(x in line for x in AS_UNSUPPORTED):
+                f.write(line + b"\n")
 
     # Assemble the result
     subprocess.run(
@@ -1354,7 +1288,8 @@ def main() -> None:
                     else:
                         f.write(serialize(generate_generic_reg_taint_update(r), config))
 
-            f.write(line + b"\n")
+            if not any(x in line for x in AS_UNSUPPORTED):
+                f.write(line + b"\n")
 
             if insn is not None and insn.mnemonic.startswith("call"):
                 f.write(serialize(generate_taint_after_call(), config))
