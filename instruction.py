@@ -13,11 +13,14 @@ import re
 def is_decimal(num: bytes) -> bool:
     return num.isdigit()
 
+
 def is_hexadecimal(num: bytes) -> bool:
     return re.match(rb"\A[-+]?(?:0[xX])?[0-9a-fA-F]+\Z", num) is not None
 
+
 def is_register_att(reg: bytes) -> bool:
     return re.match(rb"\A%[0-9a-zA-Z]+\Z", reg) is not None
+
 
 @dataclass
 class Register:
@@ -99,7 +102,7 @@ class EffectiveAddress:
     base: Register | None = None
     index: Register | None = None
     scale: int | None = None
-    displacement: int | None = None
+    displacement: int | None = None  # TODO: displacement can be a label
     offset: Label | None = None
 
     def serialize_intel(self) -> bytes:
@@ -143,25 +146,23 @@ class EffectiveAddress:
         return result
 
     @staticmethod
-    def deserialize_intel(memory_operand: bytes) -> "EffectiveAddress":
+    def deserialize_intel(
+        mem_prefix: bytes, memory_operand: bytes
+    ) -> "EffectiveAddress | None":
+        # TODO: support gcc effective address format, currently only supports clang
         # Expects memory operand in format width [base+index*scale+displacement]
-        # With all parts being optional, may or may not have spaces around each
+        # mem_prefix could be width or could be "offset label"
 
-        # TODO: Rename one of the 2 things we called 'offset'
-        ea_match: re.Match[bytes] | None = re.match(
-            rb"(?P<width>[^\[]*)\[(?P<offset>[^\]]*)\]", memory_operand
-        )
-        assert ea_match is not None
-
-        # Could be width or could be "offset label"
-        # TODO: Handle rip relative movs like: offset label[rip + immediate]
-        width_key: bytes = ea_match["width"].strip(b" \t")
-
-        width: EAWidth | None = (
-            EAWidth.deserialize_intel(width_key) if len(width_key) > 0 else None
-        )
-
-        offset: bytes = b"".join(ea_match["offset"].strip(b" \t").split())
+        offset: Label | None = None
+        width: EAWidth | None = None
+        if b"offset" in mem_prefix:
+            offset = Label((mem_prefix.split()[1]).strip(b" \t"))
+        else:
+            width = (
+                EAWidth.deserialize_intel(mem_prefix.strip(b" \t"))
+                if len(mem_prefix.strip(b" \t")) > 0
+                else None
+            )
 
         # combinations:
         # [base]
@@ -171,7 +172,9 @@ class EffectiveAddress:
         # [base+index+displacement]
         # [base+index*scale+displacement]
         # [base+index*scale] HANDLE
-        terms: list[bytes] = offset.split(b"+")
+        terms: list[bytes] = (b"".join(memory_operand.strip(b" \t").split())).split(
+            b"+"
+        )
 
         # If both index and scale are present, set them
         scale: int | None = None
@@ -203,14 +206,19 @@ class EffectiveAddress:
             base = Register(terms[0])
 
         return EffectiveAddress(
-            width=width, base=base, index=index, scale=scale, displacement=displacement
+            width=width,
+            base=base,
+            index=index,
+            scale=scale,
+            displacement=displacement,
+            offset=offset,
         )
 
     @staticmethod
     def deserialize_att(
         width_string: bytes, memory_operand: bytes
     ) -> "EffectiveAddress | None":
-        
+
         width: EAWidth | None = None
         # No width
         if len(width_string) > 0:
@@ -235,8 +243,8 @@ class EffectiveAddress:
         rightmost_comma_index: int
         rightmost_close_parenthesis_index: int
         memory_op_clean: bytes = b"".join(
-            memory_operand.split(b" ") # How to also split on tabs?
-        )  
+            memory_operand.split(b" ")  # How to also split on tabs?
+        )
         while (rightmost_comma_index := memory_op_clean.rfind(b",")) > (
             rightmost_close_parenthesis_index := memory_op_clean.rfind(b")")
         ):
@@ -297,10 +305,10 @@ class EffectiveAddress:
 
                 displacement = int(disp, 16) if len(disp) > 0 else None
 
-                if is_register_att(t2): # displacement(%base, %index)
+                if is_register_att(t2):  # displacement(%base, %index)
                     base = Register(t1)
                     index = Register(t2)
-                elif is_hexadecimal(t2): # displacement(%index, scale)
+                elif is_hexadecimal(t2):  # displacement(%index, scale)
                     index = Register(t1)
                     scale = int(t2, 16)
                 else:
@@ -325,7 +333,9 @@ class EffectiveAddress:
                     disp_or_offset = t1
 
                 # displacment or offset will never be a register or immediate
-                if len(disp_or_offset) > 0 and (is_register_att(disp_or_offset) or disp_or_offset.startswith(b"$")):
+                if len(disp_or_offset) > 0 and (
+                    is_register_att(disp_or_offset) or disp_or_offset.startswith(b"$")
+                ):
                     return None
 
                 if len(disp_or_offset) > 0:
@@ -335,8 +345,7 @@ class EffectiveAddress:
                         offset = Label(disp_or_offset)
                 else:
                     displacement = None
-                    
-               
+
             case _:
                 return None
 
@@ -390,7 +399,11 @@ class Instruction:
     def serialize_att(self) -> bytes:
         mnemonic: bytes = self.mnemonic
         for op in self.operands:
-            if isinstance(op, EffectiveAddress) and op.width is not None and not b"lea" in mnemonic:
+            if (
+                isinstance(op, EffectiveAddress)
+                and op.width is not None
+                and not b"lea" in mnemonic
+            ):
                 # If an instruction has 2 EA operands, this will be intentionally wrong, and shouldn't assemble.
                 mnemonic += op.width.serialize_att()
         return (
