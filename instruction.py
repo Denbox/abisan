@@ -22,6 +22,35 @@ def is_register_att(reg: bytes) -> bool:
     return re.match(rb"\A%[0-9a-zA-Z]+\Z", reg) is not None
 
 
+# bitwise negation of 64bit int
+def bitwise_neg64(i: int) -> int:
+    return int("".join("1" if bit == "0" else "0" for bit in bin(i)[2:].zfill(64)), 2)
+
+
+def to_signed_64(num_str: bytes) -> bytes:
+    if num_str.startswith(b"-"):
+
+        base: int | None = (
+            10
+            if is_decimal(num_str[1:])
+            else 16 if is_hexadecimal(num_str[1:]) else None
+        )
+        if base is None:
+            raise ValueError(
+                "Bytes Number "
+                + num_str[1:].decode("ascii")
+                + " passed to to_signed_64 is not base 10 or 16"
+            )
+
+        num: int = bitwise_neg64(int(num_str[1:], base)) + 1
+        return hex(num).encode("ascii")
+
+    else:
+        if num_str.startswith(b"+"):
+            return num_str[1:]
+        return num_str
+
+
 @dataclass
 class Register:
     val: bytes
@@ -102,7 +131,7 @@ class EffectiveAddress:
     base: Register | None = None
     index: Register | None = None
     scale: int | None = None
-    displacement: int | None = None  # TODO: displacement can be a label
+    displacement: int | Label | None = None  # TODO: displacement can be a label
     offset: Label | None = None
 
     def serialize_intel(self) -> bytes:
@@ -120,7 +149,12 @@ class EffectiveAddress:
                 self.index.serialize_intel() + b"*" + str(self.scale).encode("ascii")
             )
         if self.displacement is not None:
-            ea_components.append(str(self.displacement).encode("ascii"))
+            if isinstance(self.displacement, int):
+                ea_components.append(str(self.displacement).encode("ascii"))
+            elif isinstance(self.displacement, Label):
+                ea_components.append(self.displacement.serialize_intel())
+            else:
+                assert False
         result += b"+".join(ea_components)
         result += b"]"
         return result
@@ -128,7 +162,12 @@ class EffectiveAddress:
     def serialize_att(self) -> bytes:
         result: bytes = b""
         if self.displacement is not None:
-            result += str(self.displacement).encode("ascii")
+            if isinstance(self.displacement, int):
+                result += str(self.displacement).encode("ascii")
+            elif isinstance(self.displacement, Label):
+                result += self.displacement.serialize_att()
+            else:
+                assert False
         if self.offset is not None:
             if self.displacement is not None:
                 result += b"+"
@@ -153,6 +192,24 @@ class EffectiveAddress:
         # Expects memory operand in format width [base+index*scale+displacement]
         # mem_prefix could be width or could be "offset label"
 
+        # Reformatting memory operand:
+        # Moving displacement to end if necessary
+        # Remove []
+        mem_op_reformatted: bytes = memory_operand
+        operand_parts: list[bytes] = b"".join(memory_operand.split()).split(b"[")
+        if len(operand_parts) >= 2 and len(operand_parts[0]) > 0:
+
+            # TODO: handle single-quoted []
+            assert len(operand_parts) == 2
+
+            if is_hexadecimal(operand_parts[0][1:]):
+                operand_parts[0] = to_signed_64(operand_parts[0])
+
+            # Displacement is on the left
+            mem_op_reformatted = b"+".join(operand_parts[::-1])
+
+        mem_op_reformatted = mem_op_reformatted.replace(b"[", b"").replace(b"]", b"")
+
         offset: Label | None = None
         width: EAWidth | None = None
         if b"offset" in mem_prefix:
@@ -167,14 +224,15 @@ class EffectiveAddress:
         # combinations:
         # [base]
         # [displacement]
-        # [base+displacement]
-        # [index*scale+displacement]
-        # [base+index+displacement]
-        # [base+index*scale+displacement]
+        # [base+displacement] or displacement[base]
+        # [index*scale+displacement] or displacement[index*scale]
+        # [base+index+displacement] or displacement[base+index]
+        # [base+index*scale+displacement] or displacement[base+index*scale]
         # [base+index*scale] HANDLE
-        terms: list[bytes] = (b"".join(memory_operand.strip(b" \t").split())).split(
-            b"+"
-        )
+
+        # TODO: Displacement can be a label
+        # If displacement is a label, assume that it will always be added
+        terms: list[bytes] = mem_op_reformatted.split(b"+")
 
         # If both index and scale are present, set them
         scale: int | None = None
@@ -198,9 +256,12 @@ class EffectiveAddress:
             base = Register(terms[0])
 
         # If displacement exists, it is always the last term
-        displacement: int | None = None
+        displacement: int | Label | None = None
         if len(terms) > 1 or is_hexadecimal(terms[0]):
-            displacement = int(terms[-1], 16)
+            if is_hexadecimal(terms[-1]):
+                displacement = int(terms[-1], 16)
+            else:
+                displacement = Label(terms[-1])
         else:
             # If displacement does not exist, base is the first term
             base = Register(terms[0])
@@ -250,6 +311,7 @@ class EffectiveAddress:
         ):
             memory_op_clean = memory_op_clean[:rightmost_comma_index]
 
+        # TODO: displacement can be a label
         match memory_op_clean.split(b","):
             # Cases may contain non-memory operands before the memory operand
             # In att, it is generally not permitted to have more than one memory operand in a single instruction
