@@ -9,6 +9,8 @@ from capstone import Cs, CsInsn, x86_const
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import Section, SymbolTableSection
 
+# TODO: support segment registers
+
 from instruction import (
     Instruction,
     Register,
@@ -109,21 +111,34 @@ def get_memory_operand(
     mnemonic: bytes = tokens[0].lower()
     assert mnemonic != b"lea"
 
-    # TODO: Support single-quoted [ and ,.
+    # TODO: Support single-quoted [ and , and ptr and offset
+    # TODO: support rip relative movs
     if config.syntax == "intel":
         for operand in (token.strip() for token in tokens[1].split(b",")):
             if b"[" in operand:
-                ea_match: re.Match[bytes] | None = re.match(
-                    rb"(?P<width>[^\[]*)\[(?P<offset>[^\]]*)\]", operand
-                )
-                if ea_match is None:
-                    raise ValueError(
-                        "Invalid intel memory operand: " + operand.decode("ascii")
-                    )
 
-                return EffectiveAddress.deserialize_intel(
-                    ea_match["width"], ea_match["offset"]
+                # What we need:
+                # Where in string substring was found
+                # Length of substring found
+                prefix_signal_start: int
+                prefix_signaler: bytes
+                lower_operand: bytes = operand.lower()
+                prefix_signal_start, prefix_signaler = next(
+                    (
+                        (lower_operand.find(string), string)
+                        for string in [b"ptr", b"offset"]
+                        if string in lower_operand
+                    ),
+                    (-1, b""),
                 )
+
+                if prefix_signal_start >= 0:
+                    return EffectiveAddress.deserialize_intel(
+                        operand[: prefix_signal_start + len(prefix_signaler)],
+                        operand[prefix_signal_start + len(prefix_signaler) :],
+                    )
+                else:
+                    return EffectiveAddress.deserialize_intel(b"", operand)
 
     elif config.syntax == "att":
         # Remove mnemonic
