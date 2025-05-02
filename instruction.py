@@ -108,22 +108,10 @@ class EAWidth(Enum):
 
     @staticmethod
     def deserialize_att(width: bytes) -> "EAWidth":
-        # TODO: handle movl as dword
-        # TODO: This dict sucks
-        # Could just make it return directly what it gets from the dict
-        widths: dict[bytes, str] = {
-            b"b": "BYTE_PTR",
-            b"w": "WORD_PTR",
-            b"d": "DWORD_PTR",
-            b"l": "DWORD_PTR",
-            b"q": "QWORD_PTR",
-            b"x": "XMMWORD_PTR",
-            b"y": "YMMWORD_PTR",
-            b"z": "ZMMWORD_PTR",
-        }
+        # movl and movd are dword ptr
+        char: str = width[0:1].upper().decode("ascii") if not width.upper().startswith(b"L") else "D"
 
-        return EAWidth[widths[width[0:1].lower()]]
-
+        return EAWidth[next((size for size in list(EAWidth.__members__) if size.startswith(char)), None)]
 
 @dataclass
 class EffectiveAddress:
