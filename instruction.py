@@ -150,7 +150,7 @@ class EffectiveAddress:
             )
         if self.displacement is not None:
             if isinstance(self.displacement, int):
-                ea_components.append(str(self.displacement).encode("ascii"))
+                ea_components.append(hex(self.displacement).encode("ascii"))
             elif isinstance(self.displacement, Label):
                 ea_components.append(self.displacement.serialize_intel())
             else:
@@ -163,7 +163,7 @@ class EffectiveAddress:
         result: bytes = b""
         if self.displacement is not None:
             if isinstance(self.displacement, int):
-                result += str(self.displacement).encode("ascii")
+                result += hex(self.displacement).encode("ascii")
             elif isinstance(self.displacement, Label):
                 result += self.displacement.serialize_att()
             else:
