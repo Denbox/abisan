@@ -415,3 +415,387 @@ abisan_fail_mxcsr(struct abisan_shadow_stack_frame const *const frame,
 [[noreturn]] void abisan_fail_taint_rflags(void) {
     abisan_fail_taint("eflags");
 }
+
+[[noreturn]] void abisan_fail_taint_zmm0(void) {
+    abisan_fail_taint("zmm0");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm0(void) {
+    abisan_fail_taint("ymm0");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm0(void) {
+    abisan_fail_taint("xmm0");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm1(void) {
+    abisan_fail_taint("zmm1");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm1(void) {
+    abisan_fail_taint("ymm1");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm1(void) {
+    abisan_fail_taint("xmm1");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm2(void) {
+    abisan_fail_taint("zmm2");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm2(void) {
+    abisan_fail_taint("ymm2");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm2(void) {
+    abisan_fail_taint("xmm2");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm3(void) {
+    abisan_fail_taint("zmm3");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm3(void) {
+    abisan_fail_taint("ymm3");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm3(void) {
+    abisan_fail_taint("xmm3");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm4(void) {
+    abisan_fail_taint("zmm4");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm4(void) {
+    abisan_fail_taint("ymm4");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm4(void) {
+    abisan_fail_taint("xmm4");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm5(void) {
+    abisan_fail_taint("zmm5");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm5(void) {
+    abisan_fail_taint("ymm5");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm5(void) {
+    abisan_fail_taint("xmm5");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm6(void) {
+    abisan_fail_taint("zmm6");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm6(void) {
+    abisan_fail_taint("ymm6");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm6(void) {
+    abisan_fail_taint("xmm6");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm7(void) {
+    abisan_fail_taint("zmm7");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm7(void) {
+    abisan_fail_taint("ymm7");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm7(void) {
+    abisan_fail_taint("xmm7");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm8(void) {
+    abisan_fail_taint("zmm8");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm8(void) {
+    abisan_fail_taint("ymm8");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm8(void) {
+    abisan_fail_taint("xmm8");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm9(void) {
+    abisan_fail_taint("zmm9");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm9(void) {
+    abisan_fail_taint("ymm9");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm9(void) {
+    abisan_fail_taint("xmm9");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm10(void) {
+    abisan_fail_taint("zmm10");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm10(void) {
+    abisan_fail_taint("ymm10");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm10(void) {
+    abisan_fail_taint("xmm10");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm11(void) {
+    abisan_fail_taint("zmm11");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm11(void) {
+    abisan_fail_taint("ymm11");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm11(void) {
+    abisan_fail_taint("xmm11");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm12(void) {
+    abisan_fail_taint("zmm12");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm12(void) {
+    abisan_fail_taint("ymm12");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm12(void) {
+    abisan_fail_taint("xmm12");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm13(void) {
+    abisan_fail_taint("zmm13");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm13(void) {
+    abisan_fail_taint("ymm13");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm13(void) {
+    abisan_fail_taint("xmm13");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm14(void) {
+    abisan_fail_taint("zmm14");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm14(void) {
+    abisan_fail_taint("ymm14");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm14(void) {
+    abisan_fail_taint("xmm14");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm15(void) {
+    abisan_fail_taint("zmm15");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm15(void) {
+    abisan_fail_taint("ymm15");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm15(void) {
+    abisan_fail_taint("xmm15");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm16(void) {
+    abisan_fail_taint("zmm16");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm16(void) {
+    abisan_fail_taint("ymm16");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm16(void) {
+    abisan_fail_taint("xmm16");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm17(void) {
+    abisan_fail_taint("zmm17");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm17(void) {
+    abisan_fail_taint("ymm17");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm17(void) {
+    abisan_fail_taint("xmm17");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm18(void) {
+    abisan_fail_taint("zmm18");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm187(void) {
+    abisan_fail_taint("ymm18");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm18(void) {
+    abisan_fail_taint("xmm18");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm19(void) {
+    abisan_fail_taint("zmm19");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm19(void) {
+    abisan_fail_taint("ymm19");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm19(void) {
+    abisan_fail_taint("xmm19");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm20(void) {
+    abisan_fail_taint("zmm20");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm20(void) {
+    abisan_fail_taint("ymm20");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm20(void) {
+    abisan_fail_taint("xmm20");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm21(void) {
+    abisan_fail_taint("zmm21");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm21(void) {
+    abisan_fail_taint("ymm21");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm21(void) {
+    abisan_fail_taint("xmm21");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm22(void) {
+    abisan_fail_taint("zmm22");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm22(void) {
+    abisan_fail_taint("ymm22");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm22(void) {
+    abisan_fail_taint("xmm22");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm23(void) {
+    abisan_fail_taint("zmm23");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm23(void) {
+    abisan_fail_taint("ymm23");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm23(void) {
+    abisan_fail_taint("xmm23");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm24(void) {
+    abisan_fail_taint("zmm24");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm24(void) {
+    abisan_fail_taint("ymm24");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm24(void) {
+    abisan_fail_taint("xmm24");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm25(void) {
+    abisan_fail_taint("zmm25");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm25(void) {
+    abisan_fail_taint("ymm25");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm25(void) {
+    abisan_fail_taint("xmm25");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm26(void) {
+    abisan_fail_taint("zmm26");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm26(void) {
+    abisan_fail_taint("ymm26");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm26(void) {
+    abisan_fail_taint("xmm26");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm27(void) {
+    abisan_fail_taint("zmm27");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm27(void) {
+    abisan_fail_taint("ymm27");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm27(void) {
+    abisan_fail_taint("xmm27");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm28(void) {
+    abisan_fail_taint("zmm28");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm28(void) {
+    abisan_fail_taint("ymm28");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm28(void) {
+    abisan_fail_taint("xmm28");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm29(void) {
+    abisan_fail_taint("zmm29");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm29(void) {
+    abisan_fail_taint("ymm29");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm29(void) {
+    abisan_fail_taint("xmm29");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm30(void) {
+    abisan_fail_taint("zmm30");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm30(void) {
+    abisan_fail_taint("ymm30");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm30(void) {
+    abisan_fail_taint("xmm30");
+}
+
+[[noreturn]] void abisan_fail_taint_zmm31(void) {
+    abisan_fail_taint("zmm31");
+}
+
+[[noreturn]] void abisan_fail_taint_ymm31(void) {
+    abisan_fail_taint("ymm31");
+}
+
+[[noreturn]] void abisan_fail_taint_xmm31(void) {
+    abisan_fail_taint("xmm31");
+}
