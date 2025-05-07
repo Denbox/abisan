@@ -109,9 +109,19 @@ class EAWidth(Enum):
     @staticmethod
     def deserialize_att(width: bytes) -> "EAWidth":
         # movl and movd are dword ptr
-        char: str = width[0:1].upper().decode("ascii") if not width.upper().startswith(b"L") else "D"
+        char: str = (
+            width[0:1].upper().decode("ascii")
+            if not width.upper().startswith(b"L")
+            else "D"
+        )
 
-        return EAWidth[next((size for size in list(EAWidth.__members__) if size.startswith(char)), None)]
+        return EAWidth[
+            next(
+                (size for size in list(EAWidth.__members__) if size.startswith(char)),
+                "",
+            )
+        ]
+
 
 @dataclass
 class EffectiveAddress:
@@ -119,7 +129,7 @@ class EffectiveAddress:
     base: Register | None = None
     index: Register | None = None
     scale: int | None = None
-    displacement: int | Label | None = None  # TODO: displacement can be a label
+    displacement: int | Label | None = None
     offset: Label | None = None
 
     def serialize_intel(self) -> bytes:
@@ -167,17 +177,17 @@ class EffectiveAddress:
             ea_components.append(self.index.serialize_att())
         if self.scale is not None:
             ea_components.append(str(self.scale).encode("ascii"))
-        result += b"("
-        result += b",".join(ea_components)
-        result += b")"
+        if len(ea_components) > 0:
+            result += b"("
+            result += b",".join(ea_components)
+            result += b")"
         return result
 
     @staticmethod
     def deserialize_intel(
         mem_prefix: bytes, memory_operand: bytes
     ) -> "EffectiveAddress | None":
-        # TODO: support gcc effective address format, currently only supports clang
-        # Expects memory operand in format width [base+index*scale+displacement]
+        # Expects memory operand in format width [base+index*scale+displacement] or width displacement[base+index*scale]
         # mem_prefix could be width or could be "offset label"
 
         # Reformatting memory operand:
@@ -245,7 +255,8 @@ class EffectiveAddress:
 
         # If displacement exists, it is always the last term
         displacement: int | Label | None = None
-        if len(terms) > 1 or is_hexadecimal(terms[0]):
+        if (len(terms) > 1 or is_hexadecimal(terms[0])) and b"*" not in terms[-1]:
+
             if is_hexadecimal(terms[-1]):
                 displacement = int(terms[-1], 16)
             else:
@@ -274,7 +285,7 @@ class EffectiveAddress:
             width = EAWidth.deserialize_att(width_string)
 
         # Displacement may have to be an int
-        displacement: int | None = None
+        displacement: int | Label | None = None
         base: Register | None = None
         index: Register | None = None
         scale: int | None = None
@@ -291,9 +302,7 @@ class EffectiveAddress:
         # Remove trailing operands
         rightmost_comma_index: int
         rightmost_close_parenthesis_index: int
-        memory_op_clean: bytes = b"".join(
-            memory_operand.split(b" ")  # How to also split on tabs?
-        )
+        memory_op_clean: bytes = b"".join(memory_operand.split(b" "))
         while (rightmost_comma_index := memory_op_clean.rfind(b",")) > (
             rightmost_close_parenthesis_index := memory_op_clean.rfind(b")")
         ):
@@ -316,12 +325,17 @@ class EffectiveAddress:
 
                 # Displacement must be able to be a hexadecimal
                 # Base is a register
-                if (len(disp) > 0 and not is_hexadecimal(disp)) or not is_register_att(
-                    t1
-                ):
+                if not is_register_att(t1):
                     return None
 
-                displacement = int(disp, 16) if len(disp) > 0 else None
+                # If displacement is not an int, assume it is a label
+                # Currently, something like fee is regarded as an int, not a label
+                # TODO: Change definition of hexadecimal to be preceded by 0x or 0X all the time
+                if len(disp) > 0:
+                    if is_hexadecimal(disp) or is_decimal(disp):
+                        displacement = int(disp, 16)
+                    else:
+                        displacement = Label(disp)
 
                 base = Register(t1)
 
@@ -348,12 +362,15 @@ class EffectiveAddress:
 
                 # Displacement must be able to be a hexadecimal (not immediate)
                 # Base/Index is a register
-                if (len(disp) > 0 and not is_hexadecimal(disp)) or not is_register_att(
-                    t1
-                ):
+                if not is_register_att(t1):
                     return None
 
-                displacement = int(disp, 16) if len(disp) > 0 else None
+                # If displacement is not an int, assume it is a label
+                if len(disp) > 0:
+                    if is_hexadecimal(disp) or is_decimal(disp):
+                        displacement = int(disp, 16)
+                    else:
+                        displacement = Label(disp)
 
                 if is_register_att(t2):  # displacement(%base, %index)
                     base = Register(t1)
@@ -369,30 +386,26 @@ class EffectiveAddress:
                 # (%base)
                 # displacement
                 # displacement(%base)
-                # offset(%base = %rip)
 
-                disp_or_offset: bytes = b""
                 if b"(" in t1:
-                    disp_or_offset, t1 = t1.split(b"(")
+                    disp, t1 = t1.split(b"(")
                     t1 = t1.strip(b")")
 
                     if not is_register_att(t1):
                         return None
                     base = Register(t1)
                 else:
-                    disp_or_offset = t1
+                    disp = t1
 
-                # displacment or offset will never be a register or immediate
-                if len(disp_or_offset) > 0 and (
-                    is_register_att(disp_or_offset) or disp_or_offset.startswith(b"$")
-                ):
+                # displacment will never be a register or immediate
+                if len(disp) > 0 and (is_register_att(disp) or disp.startswith(b"$")):
                     return None
 
-                if len(disp_or_offset) > 0:
-                    if is_hexadecimal(disp_or_offset) and len(disp_or_offset):
-                        displacement = int(disp_or_offset, 16)
+                if len(disp) > 0:
+                    if is_hexadecimal(disp) or is_decimal(disp):
+                        displacement = int(disp, 16)
                     else:
-                        offset = Label(disp_or_offset)
+                        displacement = Label(disp)
                 else:
                     displacement = None
 

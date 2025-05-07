@@ -21,7 +21,7 @@ from instruction import (
     JumpTarget,
 )
 
-
+# TODO: no taint check on rsp
 cs: Cs = Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
 cs.detail = True
 
@@ -100,7 +100,6 @@ def serialize(instructions: list[Instruction], config: Config) -> bytes:
         raise ValueError("Invalid syntax provided")
 
 
-# TODO: EA.deserialize_intel() should take width and operand as separate args
 def get_memory_operand(
     line: bytes, insn: CsInsn, config: Config
 ) -> EffectiveAddress | None:
@@ -115,7 +114,12 @@ def get_memory_operand(
     # TODO: support rip relative movs
     if config.syntax == "intel":
         for operand in (token.strip() for token in tokens[1].split(b",")):
-            if b"[" in operand:
+            if b"[" in operand or b":" in operand:
+
+                # How should we handle instructions like:
+                # call [qword ptr 48[rax]]
+                while operand.startswith(b"[") and operand.endswith(b"]"):
+                    operand = operand.strip(b"[]")
 
                 # What we need:
                 # Where in string substring was found
@@ -139,6 +143,8 @@ def get_memory_operand(
                     )
                 else:
                     return EffectiveAddress.deserialize_intel(b"", operand)
+
+        raise ValueError("Invalid intel memory operand: " + line.decode("ascii"))
 
     elif config.syntax == "att":
         # Remove mnemonic
@@ -182,9 +188,9 @@ def remove_comment(line: bytes) -> bytes:
 
 
 def get_label_name(line: bytes) -> bytes | None:
-    tokens: list[bytes] = line.split(b":", maxsplit=1)
-    if len(tokens) > 1:
-        return tokens[0]
+    m: re.Match[bytes] | None = re.match(rb"\A(?P<label_name>[0-9a-zA-Z_.]+):", line)
+    if m is not None:
+        return m["label_name"]
     return None
 
 
@@ -198,20 +204,34 @@ def is_instruction(line: bytes) -> bool:
 
 
 def get_intermediate_labels(elf_file: ELFFile) -> dict[bytes, CsInsn]:
-    result: list[tuple[str, int]] = []
+    result: list[tuple[str, int, int]] = []
     for i in range(elf_file.num_sections()):
         section: Section = elf_file.get_section(i)
         if isinstance(section, SymbolTableSection):
             result += [
-                (symbol.name, symbol.entry["st_value"])
+                (symbol.name, symbol.entry["st_value"], symbol.entry["st_shndx"])
                 for symbol in section.iter_symbols()
                 if symbol.name.startswith("abisan_intermediate")
             ]
-    the_code: bytes = elf_file.get_section_by_name(".text").data()
     return {
-        name.encode("latin1"): list(cs.disasm(the_code[offset:], offset=0, count=1))[0]
-        for name, offset in result
+        name.encode("ascii"): next(
+            cs.disasm(elf_file.get_section(section).data()[offset:], offset=0, count=1)
+        )
+        for name, offset, section in result
     }
+
+
+_UNUSED_REGISTERS: set[int] = {
+    x86_const.X86_REG_RIP,
+    x86_const.X86_REG_RSP,
+    x86_const.X86_REG_FS,
+    x86_const.X86_REG_GS,
+    x86_const.X86_REG_ES,
+    x86_const.X86_REG_SS,
+    x86_const.X86_REG_DS,
+    x86_const.X86_REG_CS,
+    x86_const.X86_REG_EFLAGS,
+}
 
 
 def needs_taint_check_for_read(insn: CsInsn) -> bool:
@@ -227,10 +247,24 @@ def needs_taint_check_for_read(insn: CsInsn) -> bool:
     ):
         return False
 
+    if len(reg_ops) > 0 and all(
+        register_normalize(reg) in _UNUSED_REGISTERS for reg in reg_ops
+    ):
+        return False
+
     return True
 
 
-_UNUSED_REGISTERS: set[int] = {x86_const.X86_REG_RIP, x86_const.X86_REG_RSP}
+def needs_taint_update_for_write(insn: CsInsn) -> bool:
+    reg_ops: set[int] = get_registers_written(insn)
+
+    if len(reg_ops) <= 0:
+        return False
+
+    if all(register_normalize(reg) in _UNUSED_REGISTERS for reg in reg_ops):
+        return False
+
+    return True
 
 
 def get_registers_read(insn: CsInsn) -> set[int]:
@@ -1295,13 +1329,18 @@ def main() -> None:
                             )
                         )
 
-                for r in get_registers_written(insn):
-                    if insn.mnemonic.startswith("cmov"):
-                        f.write(
-                            serialize(generate_cmov_reg_taint_update(insn, r), config)
-                        )
-                    else:
-                        f.write(serialize(generate_generic_reg_taint_update(r), config))
+                if needs_taint_update_for_write(insn):
+                    for r in get_registers_written(insn):
+                        if insn.mnemonic.startswith("cmov"):
+                            f.write(
+                                serialize(
+                                    generate_cmov_reg_taint_update(insn, r), config
+                                )
+                            )
+                        else:
+                            f.write(
+                                serialize(generate_generic_reg_taint_update(r), config)
+                            )
 
             if not any(x in line for x in AS_UNSUPPORTED):
                 f.write(line + b"\n")
