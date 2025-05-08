@@ -3,6 +3,8 @@
 .globl control
 control:
 
+    # TODO: write to zmm, read from sub regs. We must first support more vector instructions
+    
 	# Mov into stack
 	mov QWORD PTR[rsp+0x10], r11
 	

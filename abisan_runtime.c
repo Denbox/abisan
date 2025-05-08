@@ -41,6 +41,38 @@ struct taint_state {
     uint8_t r15;
     uint8_t rbp;
     uint8_t eflags;
+    uint8_t zmm0;
+    uint8_t zmm1;
+    uint8_t zmm2;
+    uint8_t zmm3;
+    uint8_t zmm4;
+    uint8_t zmm5;
+    uint8_t zmm6;
+    uint8_t zmm7;
+    uint8_t zmm8;
+    uint8_t zmm9;
+    uint8_t zmm10;
+    uint8_t zmm11;
+    uint8_t zmm12;
+    uint8_t zmm13;
+    uint8_t zmm14;
+    uint8_t zmm15;
+    uint8_t zmm16;
+    uint8_t zmm17;
+    uint8_t zmm18;
+    uint8_t zmm19;
+    uint8_t zmm20;
+    uint8_t zmm21;
+    uint8_t zmm22;
+    uint8_t zmm23;
+    uint8_t zmm24;
+    uint8_t zmm25;
+    uint8_t zmm26;
+    uint8_t zmm27;
+    uint8_t zmm28;
+    uint8_t zmm29;
+    uint8_t zmm30;
+    uint8_t zmm31;
     // TODO: Track all the other registers
 } __attribute__((packed));
 
@@ -59,7 +91,38 @@ struct taint_state abisan_taint_state = {.rax = 0xff,
                                          .r14 = 0xff,
                                          .r15 = 0xff,
                                          .rbp = 0xff,
-                                         .eflags = 0};
+                                         .eflags = 0,
+                                         .zmm0 = 0xff,
+                                         .zmm1 = 0xff,
+                                         .zmm2 = 0xff,
+                                         .zmm3 = 0xff,
+                                         .zmm4 = 0xff,
+                                         .zmm5 = 0xff,
+                                         .zmm6 = 0xff,
+                                         .zmm7 = 0xff,
+                                         .zmm8 = 0xff,
+                                         .zmm9 = 0xff,
+                                         .zmm10 = 0xff,
+                                         .zmm11 = 0xff,
+                                         .zmm13 = 0xff,
+                                         .zmm14 = 0xff,
+                                         .zmm15 = 0xff,
+                                         .zmm16 = 0xff,
+                                         .zmm17 = 0xff,
+                                         .zmm18 = 0xff,
+                                         .zmm19 = 0xff,
+                                         .zmm20 = 0xff,
+                                         .zmm21 = 0xff,
+                                         .zmm22 = 0xff,
+                                         .zmm23 = 0xff,
+                                         .zmm24 = 0xff,
+                                         .zmm25 = 0xff,
+                                         .zmm26 = 0xff,
+                                         .zmm27 = 0xff,
+                                         .zmm28 = 0xff,
+                                         .zmm29 = 0xff,
+                                         .zmm30 = 0xff,
+                                         .zmm31 = 0xff};
 
 #define ABISAN_ERROR_START "\x1b[0;31mABISanitizer: "
 
