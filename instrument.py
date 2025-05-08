@@ -121,26 +121,34 @@ def get_memory_operand(
                 while operand.startswith(b"[") and operand.endswith(b"]"):
                     operand = operand.strip(b"[]")
 
-                # What we need:
-                # Where in string substring was found
-                # Length of substring found
-                prefix_signal_start: int
                 prefix_signaler: bytes
                 lower_operand: bytes = operand.lower()
-                prefix_signal_start, prefix_signaler = next(
+                prefix_signaler = next(
                     (
-                        (lower_operand.find(string), string)
+                        string
                         for string in [b"ptr", b"offset"]
                         if string in lower_operand
                     ),
-                    (-1, b""),
+                    b"",
                 )
 
-                if prefix_signal_start >= 0:
-                    return EffectiveAddress.deserialize_intel(
-                        operand[: prefix_signal_start + len(prefix_signaler)],
-                        operand[prefix_signal_start + len(prefix_signaler) :],
-                    )
+                
+           # NOT IDEAL; FIX WITH BEN
+                if len(prefix_signaler) >= 0:
+                    match prefix_signaler:
+                        case b"ptr":
+                            return EffectiveAddress.deserialize_intel(
+                                operand[:lower_operand.find(prefix_signaler) + len(prefix_signaler)],
+                                operand[lower_operand.find(prefix_signaler) + len(prefix_signaler) :],
+                            )
+                        case b"offset":
+                            prefix, memory_operand = operand.split(b"[", maxsplit=1)
+                            return EffectiveAddress.deserialize_intel(
+                                prefix,
+                                memory_operand
+                            )
+                        case _:
+                            raise ValueError("Invalid prefix to effective address offset")
                 else:
                     return EffectiveAddress.deserialize_intel(b"", operand)
 
