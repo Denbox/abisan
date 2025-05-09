@@ -8,7 +8,7 @@ set -euo pipefail
 #./tainted_unused_arg && exit 1
 ./tainted_unused_arg
 if [ $? -eq 0 ]; then
-	echo -e "\e[35mTest Failed. This is due to a known and expected bug in the abisan code.\e[0m"
+    echo -e "\e[35mTest Failed. This is due to a known and expected bug in the abisan code.\e[0m"
 else
     echo -e "\e[32mTest expected to fail, passed.\e[0m"
     exit 1

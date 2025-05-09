@@ -2,12 +2,16 @@
 
 .globl control
 control:
+    push rbp
+    mov rbp, rsp
+    sub rsp, 0x10
 
     # TODO: write to zmm, read from sub regs. We must first support more vector instructions
     
-	# Mov into stack
-	mov QWORD PTR[rsp+0x10], r11
-	
+    # Mov into stack
+    mov QWORD PTR[rbp-0x10], r11
+    
+>>>>>>> 6e732b2 (Fix tabs in tests)
     # Add up the first 7 arguments into rax
     xor rax, rax
     add rax, rdi
@@ -16,7 +20,7 @@ control:
     add rax, rcx
     add rax, r8
     add rax, r9
-    add rax, QWORD PTR [rsp + 0x08]
+    add rax, QWORD PTR [rbp + 0x10]
 
     # mov into the heap
     push rax
@@ -39,7 +43,7 @@ control:
     call free
     pop rax
 
-	# Write to volatile 64bit reg, read from its sub-regs
+    # Write to volatile 64bit reg, read from its sub-regs
     push rax
     mov r11, 0x12345678
     mov al, r11b # Low 8 bits
@@ -60,6 +64,8 @@ control:
     xor r11, r11
 
     # Mov from above the frame
-  	mov rcx, QWORD PTR [rsp + 0x8]
+    mov rcx, QWORD PTR [rbp + 0x10]
 
-	ret
+    add rsp, 0x10
+    pop rbp
+    ret

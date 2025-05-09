@@ -1,9 +1,9 @@
 .globl control_att
 control_att:
 
-	# Mov into stack
+    # Mov into stack
     movq 0x10(%rsp), %r11
-	
+    
     # Add up the first 7 arguments into rax
     xor %rax, %rax
     add %rdi, %rax
@@ -35,7 +35,7 @@ control_att:
     call free
     pop %rax
 
-	# Write to volatile 64bit reg, read from its sub-regs
+    # Write to volatile 64bit reg, read from its sub-regs
     push %rax
     mov $0x12345678, %r11
     mov %r11b, %al # Low 8 bits
@@ -58,4 +58,4 @@ control_att:
     # Mov from above the frame
     movq 0x8(%rsp), %rcx
 
-	ret
+    ret

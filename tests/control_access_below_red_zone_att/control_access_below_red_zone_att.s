@@ -1,6 +1,6 @@
 .globl control_access_below_red_zone_att
 control_access_below_red_zone_att:
-	# This assumes that the redzone is enabled. If it is disabled, abisan will throw an error
+    # This assumes that the redzone is enabled. If it is disabled, abisan will throw an error
     # Zero rax
     xor %rax, %rax
    
@@ -42,4 +42,4 @@ control_access_below_red_zone_att:
     # Conditional mov in the red zone with a true condition
     cmova -0x80(%rsp), %rcx
 
-	ret
+    ret
