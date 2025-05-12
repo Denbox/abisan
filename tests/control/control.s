@@ -65,6 +65,9 @@ control:
     # Mov from above the frame
     mov rcx, QWORD PTR [rbp + 0x10]
 
+    # Mov from red zone
+    mov rcx, QWORD PTR [rsp - 0x10]
+
     add rsp, 0x10
     pop rbp
     ret

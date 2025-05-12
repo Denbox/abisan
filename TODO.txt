@@ -1,4 +1,3 @@
-
 1. Test on real code
 2. Integrate with a kernel
 3. Better errors

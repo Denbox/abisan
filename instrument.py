@@ -4,7 +4,10 @@ import subprocess
 import sys
 import re
 
+from enum import Enum
+
 import capstone  # type: ignore
+
 from capstone import Cs, CsInsn, x86_const
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import Section, SymbolTableSection
@@ -19,6 +22,7 @@ from instruction import (
     EAWidth,
     Label,
     JumpTarget,
+    parse_number
 )
 
 # TODO: no taint check on rsp
@@ -43,58 +47,52 @@ TAINT_STATE_RBP: int = 14
 TAINT_STATE_EFLAGS: int = 15
 
 REDZONE_SIZE: int = 0x80
-REDZONE_ENABLED_ENV_NAME: str = "ABISAN_TUNABLES_REDZONE_ENABLED"
-STACK_SIZE_ENV_NAME: str = "ABISAN_TUNABLES_STACK_SIZE"
-SYNTAX_ENV_NAME: str = "ABISAN_TUNABLES_SYNTAX"
-NUM_ENVS: int = 3
 
-# Non-crucial fluff created by compilers besides gcc which is not supported in the gnu assembler
-AS_UNSUPPORTED: list[bytes] = [b".addrsig"]
+class X86Syntax(Enum):
+    ATT = 0
+    INTEL = 1
 
 
 @dataclasses.dataclass
 class Config:
     redzone_enabled: bool
     stack_size: int
-    syntax: str
+    syntax: X86Syntax
 
 
-# tunables is a list of environment variable values in the following order:
-# 0: REDZONE_ENABLED
-# 1: STACK_SIZE
-# 2: SYNTAX
-def parse_tunable_envs(tunables: list[str]):
-    redzone_enabled: bool = False
+def parse_tunable_envs() -> Config:
+    redzone_enabled: bool = True
     stack_size: int = 0x800000
-    syntax: str = "intel"
+    syntax: X86Syntax = X86Syntax.ATT
 
-    if len(tunables) == NUM_ENVS:
+    redzone_enabled_match: re.Match[str] | None = re.match(
+        r"\A(?P<value>[0-9]+)", os.environ.get("ABISAN_TUNABLES_REDZONE_ENABLED", "")
+    )
+    if redzone_enabled_match is not None:
+        redzone_enabled = bool(int(redzone_enabled_match["value"]))
 
-        redzone_enabled_match: re.Match[str] | None = re.match(
-            r"\A(?P<value>[0-9]+)", tunables[0]
-        )
-        if redzone_enabled_match is not None:
-            redzone_enabled = bool(int(redzone_enabled_match["value"]))
+    stack_size_match: re.Match[str] | None = re.match(
+        r"\A(?P<value>.+)", os.environ.get("ABISAN_TUNABLES_STACK_SIZE", "")
+    )
+    if stack_size_match is not None:
+        stack_size = parse_number(stack_size_match["value"].encode("ascii"))
 
-        stack_size_match: re.Match[str] | None = re.match(
-            r"\A(?P<value>[0-9]+)", tunables[1]
-        )
-        if stack_size_match is not None:
-            stack_size = int(stack_size_match["value"])
-
-        syntax_match: re.Match[str] | None = re.match(
-            r"\A(?P<value>(intel)|(att))", tunables[2]
-        )
-        if syntax_match is not None:
-            syntax = syntax_match["value"]
+    syntax_match: re.Match[str] | None = re.match(
+        r"\A(?P<value>intel|att)\Z", os.environ.get("ABISAN_TUNABLES_SYNTAX", "")
+    )
+    if syntax_match is not None:
+        if syntax_match["value"] == "att":
+            syntax = X86Syntax.ATT
+        elif syntax_match["value"] == "intel":
+            syntax = X86Syntax.INTEL
 
     return Config(redzone_enabled, stack_size, syntax)
 
 
 def serialize_instructions(instructions: list[Instruction], config: Config) -> bytes:
-    if config.syntax == "intel":
+    if config.syntax == X86Syntax.INTEL:
         return b"\n".join(map(Instruction.serialize_intel, instructions)) + b"\n"
-    if config.syntax == "att":
+    if config.syntax == X86Syntax.ATT:
         return b"\n".join(map(Instruction.serialize_att, instructions)) + b"\n"
     raise ValueError("Invalid syntax provided")
 
@@ -111,7 +109,7 @@ def get_memory_operand(
 
     # TODO: Support single-quoted [ and , and ptr and offset
     # TODO: support rip relative movs
-    if config.syntax == "intel":
+    if config.syntax == X86Syntax.INTEL:
         for operand in (token.strip() for token in tokens[1].split(b",")):
             if b"[" in operand or b":" in operand:
 
@@ -152,7 +150,7 @@ def get_memory_operand(
 
         raise ValueError("Invalid intel memory operand: " + line.decode("ascii"))
 
-    if config.syntax == "att":
+    if config.syntax == X86Syntax.ATT:
         # Remove mnemonic
         # Starting left to right, try and parse as a memory operand, if we reach the potential memory operand, yay!
         # Otherwise, consume everything up until the next comma
@@ -189,6 +187,7 @@ def remove_comment(line: bytes) -> bytes:
     if len(split_line) > 0:
         if split_line[0].endswith(b"'") and split_line[1].startswith(b"'"):
             return split_line[0] + b"#" + remove_comment(split_line[1])
+        # TODO: Handle '#' in strings.
         return split_line[0]
     return line
 
@@ -1246,12 +1245,7 @@ def main() -> None:
         )
         sys.exit(1)
 
-    tunables: list[str] = [
-        os.environ.get(REDZONE_ENABLED_ENV_NAME, ""),
-        os.environ.get(STACK_SIZE_ENV_NAME, ""),
-        os.environ.get(SYNTAX_ENV_NAME, ""),
-    ]
-    config: Config = parse_tunable_envs(tunables)
+    config: Config = parse_tunable_envs()
 
     input_file_name: str = sys.argv[1]
     _, input_file_name_suffix = input_file_name.rsplit(".", maxsplit=1)
@@ -1275,13 +1269,17 @@ def main() -> None:
                 instruction_line_numbers[label_name] = i
 
             # Remove unnecessary additions by non gcc compilers
-            if not any(x in line for x in AS_UNSUPPORTED):
-                f.write(line + b"\n")
+            f.write(line + b"\n")
 
     # Assemble the result
-    subprocess.run(
-        ["as", intermediate_file_name, "-o", intermediate_object_file_name], check=True
-    )
+    try:
+        subprocess.run(
+            ["as", intermediate_file_name, "-o", intermediate_object_file_name], check=True
+        )
+    except subprocess.CalledProcessError:
+        subprocess.run(
+            ["llvm-as", intermediate_file_name, "-o", intermediate_object_file_name], check=True
+        )
 
     intermediate_labels: dict[bytes, CsInsn] = get_intermediate_labels(
         ELFFile.load_from_path(intermediate_object_file_name)
@@ -1321,8 +1319,7 @@ def main() -> None:
                             output_instructions += generate_generic_reg_taint_update(r)
                 f.write(serialize_instructions(output_instructions, config))
 
-            if not any(x in line for x in AS_UNSUPPORTED):
-                f.write(line + b"\n")
+            f.write(line + b"\n")
 
             if insn is not None and insn.mnemonic.startswith("call"):
                 f.write(serialize_instructions(TAINT_AFTER_CALL, config))
@@ -1330,6 +1327,10 @@ def main() -> None:
             if get_label_name(line) in global_symbols:
                 f.write(b"    call abisan_function_entry\n")
 
+            if re.match(rb"[ \t]*\.intel_syntax(?:[ \t]+(?:no)prefix)\Z", line, re.I):
+                config.syntax = X86Syntax.INTEL
+            elif re.match(rb"[ \t]*\.att_syntax(?:[ \t]+(?:no)prefix)\Z", line, re.I):
+                config.syntax = X86Syntax.ATT
 
 if __name__ == "__main__":
     main()

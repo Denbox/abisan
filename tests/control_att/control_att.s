@@ -1,10 +1,15 @@
 .globl control_att
 control_att:
+    push %rbp
+    mov %rsp, %rbp
+    sub $0x10, %rsp
+
+    # TODO: write to zmm, read from sub regs. We must first support more vector instructions
 
     # Mov into stack
-    movq 0x10(%rsp), %r11
-    
-    # Add up the first 7 arguments into rax
+    mov %r11, -0x10(%rbp)
+
+    # Add up the first 7 arguments into %rax
     xor %rax, %rax
     add %rdi, %rax
     add %rsi, %rax
@@ -12,7 +17,7 @@ control_att:
     add %rcx, %rax
     add %r8, %rax
     add %r9, %rax
-    addq 0x08(%rsp), %rax
+    add 0x10(%rbp), %rax
 
     # mov into the heap
     push %rax
@@ -38,12 +43,12 @@ control_att:
     # Write to volatile 64bit reg, read from its sub-regs
     push %rax
     mov $0x12345678, %r11
-    mov %r11b, %al # Low 8 bits
-    mov %r11w, %ax # Low 16 bits
-    mov %r11d, %eax # Low 32 bits
-    mov %r11, %rax # All 64 bits
+    mov %r11b , %al # Low 8 bits
+    mov %r11w , %ax # Low 16 bits
+    mov %r11d , %eax # low 32 bits
+    mov %r11 , %rax # All 64 bits
     pop %rax
-    
+
     # Zero all volatile registers
     xor %rdi, %rdi
     xor %rsi, %rsi
@@ -56,6 +61,11 @@ control_att:
     xor %r11, %r11
 
     # Mov from above the frame
-    movq 0x8(%rsp), %rcx
+    mov 0x10(%rbp), %rcx
 
+    # Mov from red zone
+    mov -0x10(%rsp), %rcx
+
+    add $0x10, %rsp
+    pop %rbp
     ret

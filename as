@@ -5,60 +5,42 @@ import sys
 import subprocess
 from pathlib import Path
 
-
-REAL_AS: str = "/usr/bin/as"
-INSTRUMENTED_SUFFIX: str = ".abisan.s"
-
 def main() -> None:
-    args: list[str] = sys.argv[1:]
-
-    # for now, assume that the user has set their ABISAN_TUNABLES_SYNTAX environment variable correctly
-    # TODO: detect whether file is att or intel and set env accordingly
-
-    for i in range(len(args)):
-        arg: str = args[i]
-        
-        if not arg.startswith("-") and arg.endswith(".s") and not ".abisan." in arg:
-            
+    args: list[str] = []
+    for arg in sys.argv[1:]:
+        if not arg.startswith("-") and arg.endswith(".s") and ".abisan." not in arg:
             subprocess.run(
-                ["python3", "instrument.py", arg], check=True 
+                ["python3", "instrument.py", arg], check=True
             )
-            args[i] = arg + INSTRUMENTED_SUFFIX
+            args.append(arg + ".abisan.s")
 
             subprocess.run(
-                ["rm", arg + ".abisan.intermediate.s"], check=True
-            )
-            subprocess.run(
-                ["rm", arg + ".abisan.intermediate.s.o"], check=True
+                ["rm", arg + ".abisan.intermediate.s", arg + ".abisan.intermediate.s.o"], check=True
             )
 
-
-    # Converts a string representing a path to an absolute path
-    def path_to_absolute(path: str) -> str:
-        p: Path = Path(path)
-
-        if not p.is_absolute():
-            p = p.resolve()
-
-        return str(p)
-
-    
-    # Getting list of paths
-    paths: list[str] = list(map(path_to_absolute,os.environ.get("PATH").split(":")))
     # Directory this file is found in
-    this_directory: str = path_to_absolute(__file__).rsplit("/",maxsplit=1)[0]
+    this_directory: Path = Path(__file__).resolve().parent
 
     # Remove current directory from the path
-    for path in paths:
-        if this_directory in path:
-            paths.remove(path)
+    new_path: list[str] = []
+    path: str | None = os.environ.get("PATH", None)
+    if path is not None:
+        for path_element in path.split(":"):
+            if Path(path_element).resolve() != this_directory:
+                new_path.append(path_element)
 
-    subproc_env = os.environ.copy()
-    subproc_env["PATH"] = ":".join(paths)
+    subproc_env: dict[str, str] = os.environ.copy()
+    if path is not None:
+        subproc_env["PATH"] = ":".join(new_path)
 
-    subprocess.run(
-        [REAL_AS] + args, check=True, env=subproc_env
-    )
-    
+    try:
+        subprocess.run(
+            ["as", *args], check=True, env=subproc_env
+        )
+    except subprocess.CalledProcessError:
+        subprocess.run(
+            ["llvm-as", *args], check=True, env=subproc_env
+        )
+
 if __name__ == "__main__":
     main()
