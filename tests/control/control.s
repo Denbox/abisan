@@ -11,7 +11,6 @@ control:
     # Mov into stack
     mov QWORD PTR[rbp-0x10], r11
     
->>>>>>> 6e732b2 (Fix tabs in tests)
     # Add up the first 7 arguments into rax
     xor rax, rax
     add rax, rdi

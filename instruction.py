@@ -15,40 +15,23 @@ def is_decimal(num: bytes) -> bool:
 
 
 def is_hexadecimal(num: bytes) -> bool:
-    return re.match(rb"\A[-+]?(?:0[xX])?[0-9a-fA-F]+\Z", num) is not None
+    return re.match(rb"\A[-+]?(?:0[xX])[0-9a-fA-F]+\Z", num) is not None
+
+
+def is_number(num: bytes) -> bool:
+    return is_decimal(num) or is_hexadecimal(num)
+
+
+def parse_number(num: bytes) -> int:
+    if is_decimal(num):
+        return int(num, 10)
+    if is_hexadecimal(num):
+        return int(num, 16)
+    assert False
 
 
 def is_register_att(reg: bytes) -> bool:
     return re.match(rb"\A%[0-9a-zA-Z]+\Z", reg) is not None
-
-
-# bitwise negation of 64bit int
-def bitwise_neg64(i: int) -> int:
-    return int("".join("1" if bit == "0" else "0" for bit in bin(i)[2:].zfill(64)), 2)
-
-
-def to_signed_64(num_str: bytes) -> bytes:
-    if num_str.startswith(b"-"):
-
-        base: int | None = (
-            10
-            if is_decimal(num_str[1:])
-            else 16 if is_hexadecimal(num_str[1:]) else None
-        )
-        if base is None:
-            raise ValueError(
-                "Bytes Number "
-                + num_str[1:].decode("ascii")
-                + " passed to to_signed_64 is not base 10 or 16"
-            )
-
-        num: int = bitwise_neg64(int(num_str[1:], base)) + 1
-        return hex(num).encode("ascii")
-
-    else:
-        if num_str.startswith(b"+"):
-            return num_str[1:]
-        return num_str
 
 
 @dataclass
@@ -200,9 +183,6 @@ class EffectiveAddress:
             # TODO: handle single-quoted []
             assert len(operand_parts) == 2
 
-            if is_hexadecimal(operand_parts[0][1:]):
-                operand_parts[0] = to_signed_64(operand_parts[0])
-
             # Displacement is on the left
             mem_op_reformatted = b"+".join(operand_parts[::-1])
 
@@ -301,11 +281,8 @@ class EffectiveAddress:
 
         # Remove trailing operands
         rightmost_comma_index: int
-        rightmost_close_parenthesis_index: int
         memory_op_clean: bytes = b"".join(memory_operand.split(b" "))
-        while (rightmost_comma_index := memory_op_clean.rfind(b",")) > (
-            rightmost_close_parenthesis_index := memory_op_clean.rfind(b")")
-        ):
+        while (rightmost_comma_index := memory_op_clean.rfind(b",")) > memory_op_clean.rfind(b")"):
             memory_op_clean = memory_op_clean[:rightmost_comma_index]
 
         # TODO: displacement can be a label
@@ -465,7 +442,7 @@ class Instruction:
             if (
                 isinstance(op, EffectiveAddress)
                 and op.width is not None
-                and not b"lea" in mnemonic
+                and b"lea" not in mnemonic
             ):
                 # If an instruction has 2 EA operands, this will be intentionally wrong, and shouldn't assemble.
                 mnemonic += op.width.serialize_att()

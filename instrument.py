@@ -91,13 +91,12 @@ def parse_tunable_envs(tunables: list[str]):
     return Config(redzone_enabled, stack_size, syntax)
 
 
-def serialize(instructions: list[Instruction], config: Config) -> bytes:
+def serialize_instructions(instructions: list[Instruction], config: Config) -> bytes:
     if config.syntax == "intel":
         return b"\n".join(map(Instruction.serialize_intel, instructions)) + b"\n"
-    elif config.syntax == "att":
+    if config.syntax == "att":
         return b"\n".join(map(Instruction.serialize_att, instructions)) + b"\n"
-    else:
-        raise ValueError("Invalid syntax provided")
+    raise ValueError("Invalid syntax provided")
 
 
 def get_memory_operand(
@@ -132,7 +131,6 @@ def get_memory_operand(
                     b"",
                 )
 
-                
            # NOT IDEAL; FIX WITH BEN
                 if len(prefix_signaler) >= 0:
                     match prefix_signaler:
@@ -154,24 +152,24 @@ def get_memory_operand(
 
         raise ValueError("Invalid intel memory operand: " + line.decode("ascii"))
 
-    elif config.syntax == "att":
+    if config.syntax == "att":
         # Remove mnemonic
         # Starting left to right, try and parse as a memory operand, if we reach the potential memory operand, yay!
         # Otherwise, consume everything up until the next comma
 
         mem_operand: bytes = line.lstrip()[len(mnemonic) :]
-        EA: EffectiveAddress | None
+        ea: EffectiveAddress | None
         width: bytes = tokens[0].lstrip()[len(insn.mnemonic) : len(insn.mnemonic) + 1]
 
         while (
-            EA := EffectiveAddress.deserialize_att(width, mem_operand.lstrip())
+            ea := EffectiveAddress.deserialize_att(width, mem_operand.lstrip())
         ) is None:
             if b"," in mem_operand and not mem_operand.endswith(b","):
                 before_first_comma = mem_operand.split(b",")[0]
                 mem_operand = mem_operand[len(before_first_comma) + 1 :]
             else:  # No operands remaining
                 assert False
-        return EA
+        return ea
     assert False
 
 
@@ -1144,105 +1142,100 @@ def generate_cmov_reg_taint_update(insn: CsInsn, r: int) -> list[Instruction]:
     return instructions
 
 
-def generate_taint_after_call() -> list[Instruction]:
-    # Taint everything that could have been clobbered in a call
-
-    instructions: list[Instruction] = [
-        Instruction(b"push", Register(b"rdi")),
-        Instruction(
-            b"lea",
-            Register(b"rdi"),
-            EffectiveAddress(
-                width=EAWidth.BYTE_PTR,
-                base=Register(b"rip"),
-                offset=Label(b"abisan_taint_state"),
-            ),
+TAINT_AFTER_CALL: list[Instruction] = [
+    Instruction(b"push", Register(b"rdi")),
+    Instruction(
+        b"lea",
+        Register(b"rdi"),
+        EffectiveAddress(
+            width=EAWidth.BYTE_PTR,
+            base=Register(b"rip"),
+            offset=Label(b"abisan_taint_state"),
         ),
-        Instruction(
-            b"mov",
-            EffectiveAddress(
-                width=EAWidth.BYTE_PTR,
-                base=Register(b"rdi"),
-                displacement=TAINT_STATE_RAX,
-            ),
-            Immediate(b"0"),
+    ),
+    Instruction(
+        b"mov",
+        EffectiveAddress(
+            width=EAWidth.BYTE_PTR,
+            base=Register(b"rdi"),
+            displacement=TAINT_STATE_RAX,
         ),
-        Instruction(
-            b"mov",
-            EffectiveAddress(
-                width=EAWidth.BYTE_PTR,
-                base=Register(b"rdi"),
-                displacement=TAINT_STATE_RCX,
+        Immediate(b"0"),
+    ),
+    Instruction(
+        b"mov",
+        EffectiveAddress(
+            width=EAWidth.BYTE_PTR,
+            base=Register(b"rdi"),
+            displacement=TAINT_STATE_RCX,
             ),
-            Immediate(b"0xff"),
+        Immediate(b"0xff"),
+    ),
+    Instruction(
+        b"mov",
+        EffectiveAddress(
+            width=EAWidth.BYTE_PTR,
+            base=Register(b"rdi"),
+            displacement=TAINT_STATE_RDX,
         ),
-        Instruction(
-            b"mov",
-            EffectiveAddress(
-                width=EAWidth.BYTE_PTR,
-                base=Register(b"rdi"),
-                displacement=TAINT_STATE_RDX,
-            ),
-            Immediate(b"0xff"),
+        Immediate(b"0xff"),
+    ),
+    Instruction(
+        b"mov",
+        EffectiveAddress(
+            width=EAWidth.BYTE_PTR,
+            base=Register(b"rdi"),
+            displacement=TAINT_STATE_RDI,
         ),
-        Instruction(
-            b"mov",
-            EffectiveAddress(
-                width=EAWidth.BYTE_PTR,
-                base=Register(b"rdi"),
-                displacement=TAINT_STATE_RDI,
-            ),
-            Immediate(b"0xff"),
+        Immediate(b"0xff"),
+    ),
+    Instruction(
+        b"mov",
+        EffectiveAddress(
+            width=EAWidth.BYTE_PTR,
+            base=Register(b"rdi"),
+            displacement=TAINT_STATE_RSI,
         ),
-        Instruction(
-            b"mov",
-            EffectiveAddress(
-                width=EAWidth.BYTE_PTR,
-                base=Register(b"rdi"),
-                displacement=TAINT_STATE_RSI,
-            ),
-            Immediate(b"0xff"),
+        Immediate(b"0xff"),
+    ),
+    Instruction(
+        b"mov",
+        EffectiveAddress(
+            width=EAWidth.BYTE_PTR,
+            base=Register(b"rdi"),
+            displacement=TAINT_STATE_R8,
         ),
-        Instruction(
-            b"mov",
-            EffectiveAddress(
-                width=EAWidth.BYTE_PTR,
-                base=Register(b"rdi"),
-                displacement=TAINT_STATE_R8,
-            ),
-            Immediate(b"0xff"),
+        Immediate(b"0xff"),
+    ),
+    Instruction(
+        b"mov",
+        EffectiveAddress(
+            width=EAWidth.BYTE_PTR,
+            base=Register(b"rdi"),
+            displacement=TAINT_STATE_R9,
         ),
-        Instruction(
-            b"mov",
-            EffectiveAddress(
-                width=EAWidth.BYTE_PTR,
-                base=Register(b"rdi"),
-                displacement=TAINT_STATE_R9,
-            ),
-            Immediate(b"0xff"),
+        Immediate(b"0xff"),
+    ),
+    Instruction(
+        b"mov",
+        EffectiveAddress(
+            width=EAWidth.BYTE_PTR,
+            base=Register(b"rdi"),
+            displacement=TAINT_STATE_R10,
         ),
-        Instruction(
-            b"mov",
-            EffectiveAddress(
-                width=EAWidth.BYTE_PTR,
-                base=Register(b"rdi"),
-                displacement=TAINT_STATE_R10,
-            ),
-            Immediate(b"0xff"),
+        Immediate(b"0xff"),
+    ),
+    Instruction(
+        b"mov",
+        EffectiveAddress(
+            width=EAWidth.BYTE_PTR,
+            base=Register(b"rdi"),
+            displacement=TAINT_STATE_R11,
         ),
-        Instruction(
-            b"mov",
-            EffectiveAddress(
-                width=EAWidth.BYTE_PTR,
-                base=Register(b"rdi"),
-                displacement=TAINT_STATE_R11,
-            ),
-            Immediate(b"0xff"),
-        ),
-        Instruction(b"pop", Register(b"rdi")),
-    ]
-
-    return instructions
+        Immediate(b"0xff"),
+    ),
+    Instruction(b"pop", Register(b"rdi")),
+]
 
 
 def main() -> None:
@@ -1309,52 +1302,30 @@ def main() -> None:
         for i, line in enumerate(map(bytes.rstrip, map(remove_comment, lines))):
             insn: CsInsn = assembled_instructions.get(i)
             if insn is not None:
-                registers_read: set[int] = get_registers_read(insn)
-                registers_written: set[int] = get_registers_written(insn)
+                output_instructions: list[Instruction] = []
                 if insn.op_count(capstone.CS_OP_MEM) > 0 and insn.mnemonic != "lea":
                     if insn.mnemonic.startswith("cmov"):
-                        f.write(
-                            serialize(
-                                generate_cmov_instrumentation(line, insn, config),
-                                config,
-                            )
-                        )
+                        output_instructions += generate_cmov_instrumentation(line, insn, config)
                     else:
-                        f.write(
-                            serialize(
-                                generate_generic_memory_instrumentation(
-                                    line, insn, config
-                                ),
-                                config,
-                            )
-                        )
+                        output_instructions += generate_generic_memory_instrumentation(line, insn, config)
 
                 if needs_taint_check_for_read(insn):
                     for r in get_registers_read(insn):
-                        f.write(
-                            serialize(
-                                generate_reg_taint_check(line, insn, r, config), config
-                            )
-                        )
+                        output_instructions += generate_reg_taint_check(line, insn, r, config)
 
                 if needs_taint_update_for_write(insn):
                     for r in get_registers_written(insn):
                         if insn.mnemonic.startswith("cmov"):
-                            f.write(
-                                serialize(
-                                    generate_cmov_reg_taint_update(insn, r), config
-                                )
-                            )
+                            output_instructions += generate_cmov_reg_taint_update(insn, r)
                         else:
-                            f.write(
-                                serialize(generate_generic_reg_taint_update(r), config)
-                            )
+                            output_instructions += generate_generic_reg_taint_update(r)
+                f.write(serialize_instructions(output_instructions, config))
 
             if not any(x in line for x in AS_UNSUPPORTED):
                 f.write(line + b"\n")
 
             if insn is not None and insn.mnemonic.startswith("call"):
-                f.write(serialize(generate_taint_after_call(), config))
+                f.write(serialize_instructions(TAINT_AFTER_CALL, config))
 
             if get_label_name(line) in global_symbols:
                 f.write(b"    call abisan_function_entry\n")
