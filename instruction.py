@@ -177,7 +177,7 @@ class EffectiveAddress:
         # Moving displacement to end if necessary
         # Remove []
         mem_op_reformatted: bytes = memory_operand
-        operand_parts: list[bytes] = b"".join(memory_operand.split()).split(b"[")
+        operand_parts: list[bytes] = memory_operand.translate(bytes(range(0x100)), b" \t").split(b"[")
         if len(operand_parts) >= 2 and len(operand_parts[0]) > 0:
 
             # TODO: handle single-quoted []
@@ -219,8 +219,8 @@ class EffectiveAddress:
             if b"*" in term:
                 idx, scl = term.split(b"*")
                 index = Register(idx)
-                if is_hexadecimal(scl):
-                    scale = int(scl, 16)
+                if is_number(scl):
+                    scale = parse_number(scl)
                 else:
                     raise ValueError("Invalid scale")
 
@@ -235,10 +235,10 @@ class EffectiveAddress:
 
         # If displacement exists, it is always the last term
         displacement: int | Label | None = None
-        if (len(terms) > 1 or is_hexadecimal(terms[0])) and b"*" not in terms[-1]:
+        if (len(terms) > 1 or is_number(terms[0])) and b"*" not in terms[-1]:
 
-            if is_hexadecimal(terms[-1]):
-                displacement = int(terms[-1], 16)
+            if is_number(terms[-1]):
+                displacement = parse_number(terms[-1])
             else:
                 displacement = Label(terms[-1])
         else:
@@ -309,8 +309,8 @@ class EffectiveAddress:
                 # Currently, something like fee is regarded as an int, not a label
                 # TODO: Change definition of hexadecimal to be preceded by 0x or 0X all the time
                 if len(disp) > 0:
-                    if is_hexadecimal(disp) or is_decimal(disp):
-                        displacement = int(disp, 16)
+                    if is_number(disp):
+                        displacement = parse_number(disp)
                     else:
                         displacement = Label(disp)
 
@@ -319,7 +319,7 @@ class EffectiveAddress:
                 t3 = t3.strip(b")")
                 # Index is a register
                 # Scale is not an immediate; should be represented as hexadecimal
-                if not is_register_att(t2) or not is_hexadecimal(t3):
+                if not is_register_att(t2) or not is_number(t3):
                     return None
 
                 index = Register(t2)
@@ -344,17 +344,17 @@ class EffectiveAddress:
 
                 # If displacement is not an int, assume it is a label
                 if len(disp) > 0:
-                    if is_hexadecimal(disp) or is_decimal(disp):
-                        displacement = int(disp, 16)
+                    if is_number(disp):
+                        displacement = parse_number(disp)
                     else:
                         displacement = Label(disp)
 
                 if is_register_att(t2):  # displacement(%base, %index)
                     base = Register(t1)
                     index = Register(t2)
-                elif is_hexadecimal(t2):  # displacement(%index, scale)
+                elif is_number(t2):  # displacement(%index, scale)
                     index = Register(t1)
-                    scale = int(t2, 16)
+                    scale = parse_number(t2)
                 else:
                     return None
 
@@ -379,8 +379,8 @@ class EffectiveAddress:
                     return None
 
                 if len(disp) > 0:
-                    if is_hexadecimal(disp) or is_decimal(disp):
-                        displacement = int(disp, 16)
+                    if is_number(disp):
+                        displacement = parse_number(disp)
                     else:
                         displacement = Label(disp)
                 else:
