@@ -66,8 +66,6 @@
 .set TAINT_STATE_ZMM30, 46
 .set TAINT_STATE_ZMM31, 47
 
-    
-
 .extern abisan_shadow_stack_pointer
 .extern abisan_taint_state
 
@@ -125,7 +123,6 @@ abisan_function_entry:
     mov rbx, QWORD PTR [r11 + FRAME_RBX]
     ret
 
-.globl abisan_function_exit
 abisan_function_exit:
     sub rsp, 0x8 # We never add this back to rsp to make up for the fact that this function is returned into. We'll also use this local space for fnstcw and its ilk
 

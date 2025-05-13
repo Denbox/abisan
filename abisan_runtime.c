@@ -19,10 +19,10 @@ struct abisan_shadow_stack_frame {
 } __attribute__((packed));
 
 #define SHADOW_STACK_SIZE (1000)
-struct abisan_shadow_stack_frame ABISAN_SHADOW_STACK_BASE[SHADOW_STACK_SIZE];
+struct abisan_shadow_stack_frame ABISAN_SHADOW_STACK[SHADOW_STACK_SIZE];
 #undef SHADOW_STACK_SIZE
 struct abisan_shadow_stack_frame *abisan_shadow_stack_pointer =
-    ABISAN_SHADOW_STACK_BASE;
+    ABISAN_SHADOW_STACK;
 
 struct taint_state {
     uint8_t rax;
