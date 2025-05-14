@@ -285,7 +285,13 @@ def get_registers_read(insn: CsInsn) -> set[int]:
                 result.add(op.mem.index)
             if op.mem.segment != 0:
                 result.add(op.mem.segment)
-    return set(filter(lambda r: r not in _UNUSED_REGISTERS, result))
+
+    if insn.mnemonic == "syscall":
+        # This is interesting and was determined by experiment
+        # I would have thought that we'd need to taint rax here.
+        result.add(x86_const.X86_REG_EAX)
+
+    return set(filter(lambda r: register_normalize(r) not in _UNUSED_REGISTERS, result))
 
 
 def get_registers_written(insn: CsInsn) -> set[int]:
@@ -295,7 +301,11 @@ def get_registers_written(insn: CsInsn) -> set[int]:
         if op.type == capstone.CS_OP_REG and op.access & capstone.CS_AC_WRITE:
             result.add(op.reg)
 
-    return set(filter(lambda r: r not in _UNUSED_REGISTERS, result))
+    # Linux-specific syscall stuff:
+    if insn.mnemonic == "syscall":
+        result |= {x86_const.X86_REG_RCX, x86_const.X86_REG_R11}
+
+    return set(filter(lambda r: register_normalize(r) not in _UNUSED_REGISTERS, result))
 
 
 # bitwise negation of 8bit int
