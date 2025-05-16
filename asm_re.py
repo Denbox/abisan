@@ -1,11 +1,11 @@
 _MNEMONIC: str = r"(?P<mnemonic>[a-z][a-z0-9]+)"
 
 # This is not a mistake. GNU as actually accepts `0x` on its own.
-_HEX_NUMBER: str = r"(?:[-+~]?0x[0-9a-f]*)"
-_DEC_NUMBER: str = r"(?:[-+~]?[0-9]+)"
-_BIN_NUMBER: str = r"(?:[-+~]?0b[01]+)"
+_HEX_NUMBER: str = r"(?:(?:[-+~][ \t]*)*0x[0-9a-f]*)"
+_DEC_NUMBER: str = r"(?:(?:[-+~][ \t]*)*[0-9]+)"
+_BIN_NUMBER: str = r"(?:(?:[-+~][ \t]*)*0b[01]+)"
 
-_CHAR_CONSTANT: str = r"(?:'.'|'\\.')"
+_CHAR_CONSTANT: str = r"(?:(?:[-+~][ \t]*)*'.'|'\\.')"
 
 _IMMEDIATE: str = rf"(?:{_HEX_NUMBER}|{_DEC_NUMBER}|{_BIN_NUMBER}|{_CHAR_CONSTANT})"
 
@@ -63,40 +63,11 @@ _CONSTANT_EXPRESSION: str = rf"(?:(?:{_CONSTANT}(?:[ \t]*{_OPERATOR}[ \t]*{_CONS
 
 _SEGMENT_COLON: str = rf"(?:(?P<OP_NUM_PLACEHOLDER_segment>{_SEGMENT_REGISTER})[ \t]*:)"
 
-_EFFECTIVE_ADDRESS_DISPLACEMENT_FORM: str = rf"(?:\[?(?P<OP_NUM_PLACEHOLDER_displacement_form_displacement>{_CONSTANT_EXPRESSION})\]?)"
-
-_EFFECTIVE_ADDRESS_BASE_FORM: str = rf"(?:\[[ \t]*(?P<OP_NUM_PLACEHOLDER_base_form_base>{_REGISTER})[ \t]*\])"
-
-_BASE_AND_DISPLACEMENT: str = rf"(?:{_REGISTER}[ \t]*)[+-](?:[ \t]*{_CONSTANT_EXPRESSION})"
-_DISPLACEMENT_AND_BASE: str = rf"(?:{_CONSTANT_EXPRESSION}[ \t]*)[+-](?:[ \t]*{_REGISTER})"
-_EFFECTIVE_ADDRESS_WITH_BASE_DISPLACEMENT: str = rf"(?:{_ONE_OR_MORE_OPEN_BRACKETS}[ \t]*)(?:{_BASE_AND_DISPLACEMENT}|{_DISPLACEMENT_AND_BASE})(?:[ \t]*{_ONE_OR_MORE_CLOSE_BRACKETS})"
-
-EFFECTIVE_ADDRESS_WITH_BASE_EXTERNAL_DISPLACMENT: str = rf"(?:{_CONSTANT_EXPRESSION}[ \t]*)(?:{_ONE_OR_MORE_OPEN_BRACKETS}[ \t]*)(?:{_REGISTER}[ \t]*)({_ONE_OR_MORE_CLOSE_BRACKETS})"
-
-# XXX: Does not permit expressions which multiply to a scale, no way in regex to verify that the product is a valid scale
-_SCALE: str = r"(?:0x)?[0]*[1248]"
-
-_INDEX_SCALE: str = rf"(?:{_REGISTER}[ \t]*)\*(?:[ \t]*{_SCALE})"
-_SCALE_INDEX: str = rf"(?:{_SCALE}[ \t]*)\*(?:[ \t]*{_REGISTER})"
-_INDEX_SCALE_EXPRESSION: str = rf"(?:{_INDEX_SCALE}|{_SCALE_INDEX})"
-
 # XXX: Displacement can be any number of constant expressions on either side of a component
-#     i.e. [0x10 + rax * 2 + 0x20] == [rax * 2 + 0x30]
-_EFFECTIVE_ADDRESS_WITH_INDEX_SCALE_OPTIONAL_DISPLACEMENT: str = rf"(?:{_ONE_OR_MORE_OPEN_BRACKETS}[ \t]*)(?:{_INDEX_SCALE_EXPRESSION}[ \t]*)(?:[+-][ \t]*{_CONSTANT_EXPRESSION}[ \t]*)*\*(?:[ \t]*{_ONE_OR_MORE_CLOSE_BRACKETS})"
-
-# XXX: Displacement can be any number of constant expressions on either side of a component
-_EFFECTIVE_ADDRESS_WITH_INDEX_SCALE_EXTERNAL_DISPLACEMENT: str = rf"(?:{_CONSTANT_EXPRESSION}[ \t]*)+(?:{_ONE_OR_MORE_OPEN_BRACKETS}[ \t]*)(?:{_INDEX_SCALE_EXPRESSION}[ \t]*)(?:{_ONE_OR_MORE_CLOSE_BRACKETS})"
-
-# XXX: No way to tell whether index or base is first, gas assumes base is first
-_EFFECTIVE_ADDRESS_WITH_BASE_INDEX_OPTIONAL_DISPLACEMENT: str = rf"(?:{_ONE_OR_MORE_OPEN_BRACKETS}[ \t]*)(?:{_REGISTER}[ \t]*)\+[ \t]*(?:{_REGISTER}[ \t]*)*(?:[+-][ \t]{_CONSTANT_EXPRESSION}[ \t]*)*(?:{_ONE_OR_MORE_CLOSE_BRACKETS})"
-
-_EFFECTIVE_ADDRESS_WITH_BASE_INDEX_EXTERNAL_DISPLACEMENT: str = rf"(?:{_ONE_OR_MORE_OPEN_BRACKETS}[ \t]*)(?:{_REGISTER}[ \t]*)\+[ \t]*(?:{_REGISTER}[ \t]*)*(?:[+-][ \t]{_CONSTANT_EXPRESSION}[ \t]*)+(?:{_ONE_OR_MORE_CLOSE_BRACKETS})"
-
-# XXX: Displacement can be any number of constant expressions on either side of a component
-_EFFECTIVE_ADDRESS_WITH_BASE_INDEX_SCALE_DISPLACEMENT: str = rf"(?:{_CONSTANT_EXPRESSION}[ \t]*)+(?:{_ONE_OR_MORE_OPEN_BRACKETS}[ \t]*)(?:{_REGISTER}[ \t]*)\+[ \t]*(?:{_INDEX_SCALE_EXPRESSION}[ \t]*)*(?:[+-][ \t]{_CONSTANT_EXPRESSION}[ \t]*)+(?:{_ONE_OR_MORE_CLOSE_BRACKETS})"
+_EFFECTIVE_ADDRESS_BASE_INDEX_SCALE_DISPLACEMENT_FORM: str = rf"(?:(?:{_CONSTANT_EXPRESSION}[ \t]*)(?:\[[ \t]*)*(?:{_REGISTER}[ \t]*(?:\+[ \t]*)*)(?:(?:{_REGISTER}[ \t]*)(?:\*[ \t]*{_CONSTANT_EXPRESSION}[ \t]*)?)?(?:{_CONSTANT_EXPRESSION}[ \t]*)(?:[ \t]*\])*)"
 
 # TODO: All the other forms of memory operands
-_EFFECTIVE_ADDRESS: str = rf"(?:(?:{_SEGMENT_COLON}[ \t]*)?(?:{_EFFECTIVE_ADDRESS_BASE_FORM}|{_EFFECTIVE_ADDRESS_DISPLACEMENT_FORM}))"
+_EFFECTIVE_ADDRESS: str = rf"(?:(?:{_SEGMENT_COLON}[ \t]*)?(?:{_EFFECTIVE_ADDRESS_BASE_INDEX_SCALE_DISPLACEMENT_FORM}))"
 
 # XXX: This will allow `offset qword ptrfs:0x10`
 _MEMORY_OPERAND: str = rf"(?:(?:{_MEMORY_OPERAND_MODIFIER_SEQUENCE}[ \t]*)?{_EFFECTIVE_ADDRESS})"
