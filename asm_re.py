@@ -1,3 +1,5 @@
+from itertools import permutations
+
 _MNEMONIC: str = r"(?P<mnemonic>[a-z][a-z0-9]+)"
 
 # This is not a mistake. GNU as actually accepts `0x` on its own.
@@ -63,8 +65,23 @@ _CONSTANT_EXPRESSION: str = rf"(?:(?:{_CONSTANT}(?:[ \t]*{_OPERATOR}[ \t]*{_CONS
 
 _SEGMENT_COLON: str = rf"(?:(?P<OP_NUM_PLACEHOLDER_segment>{_SEGMENT_REGISTER})[ \t]*:)"
 
+_INDEX_SCALE: str = rf"(?:(?:\+[ \t]*)*(?:{_REGISTER})(?:[ \t]*\*[ \t]*{_CONSTANT_EXPRESSION})?)?"
+
+_ZERO_OR_MORE_OPEN_BRACKETS: str = r"(?:(?:\[(?:[ \t]*\[)*)?)"
+_ZERO_OR_MORE_CLOSE_BRACKETS: str = r"(?:(?:\](?:[ \t]*\])*)?)"
+
+# Do base and displacement even need to be separated out?
+_BASE: str = rf"(?:{_REGISTER})"
+
+_DISPLACEMENT: str = rf"(?:{_CONSTANT_EXPRESSION})"
+
 # XXX: Displacement can be any number of constant expressions on either side of a component
 _EFFECTIVE_ADDRESS_BASE_INDEX_SCALE_DISPLACEMENT_FORM: str = rf"(?:(?:{_CONSTANT_EXPRESSION}[ \t]*)(?:\[[ \t]*)*(?:{_REGISTER}[ \t]*(?:\+[ \t]*)*)(?:(?:{_REGISTER}[ \t]*)(?:\*[ \t]*{_CONSTANT_EXPRESSION}[ \t]*)?)?(?:{_CONSTANT_EXPRESSION}[ \t]*)(?:[ \t]*\])*)"
+
+def permute_ea(components: list[str]) -> list[str]:
+    return ["[ \t]*".join(p) for p in permutations(components)]
+
+_EFFECTIVE_ADDRESS_COMPONENT_PERMUTATIONS: list[str] = permute_ea([_DISPLACEMENT, _ZERO_OR_MORE_OPEN_BRACKETS, _BASE, _INDEX_SCALE, _DISPLACEMENT, _ZERO_OR_MORE_CLOSE_BRACKETS])
 
 # TODO: All the other forms of memory operands
 _EFFECTIVE_ADDRESS: str = rf"(?:(?:{_SEGMENT_COLON}[ \t]*)?(?:{_EFFECTIVE_ADDRESS_BASE_INDEX_SCALE_DISPLACEMENT_FORM}))"
