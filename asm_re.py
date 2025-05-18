@@ -76,7 +76,7 @@ _BASE: str = rf"(?:{_REGISTER})"
 _DISPLACEMENT: str = rf"(?:{_CONSTANT_EXPRESSION})"
 
 # XXX: Displacement can be any number of constant expressions on either side of a component
-_EFFECTIVE_ADDRESS_BASE_INDEX_SCALE_DISPLACEMENT_FORM: str = rf"(?:(?:{_CONSTANT_EXPRESSION}[ \t]*)(?:\[[ \t]*)*(?:{_REGISTER}[ \t]*(?:\+[ \t]*)*)(?:(?:{_REGISTER}[ \t]*)(?:\*[ \t]*{_CONSTANT_EXPRESSION}[ \t]*)?)?(?:{_CONSTANT_EXPRESSION}[ \t]*)(?:[ \t]*\])*)"
+_EFFECTIVE_ADDRESS_BASE_INDEX_SCALE_DISPLACEMENT_FORM: str = rf"(?:(?:{_CONSTANT_EXPRESSION}[ \t]*)(?:\[[ \t]*)*(?:{_REGISTER}[ \t]*(?:\+[ \t]*)*)?(?:(?:{_REGISTER}[ \t]*)(?:\*[ \t]*{_CONSTANT_EXPRESSION}[ \t]*)?)?(?:{_CONSTANT_EXPRESSION}[ \t]*)(?:[ \t]*\])*)"
 
 def permute_ea(components: list[str]) -> list[str]:
     return ["[ \t]*".join(p) for p in permutations(components)]
