@@ -1,9 +1,7 @@
-from itertools import permutations
-
 _MNEMONIC: str = r"(?P<mnemonic>[a-z][a-z0-9]+)"
 
-# This is not a mistake. GNU as actually accepts `0x` on its own.
-_HEX_NUMBER: str = r"(?:(?:[-+~][ \t]*)*0x[0-9a-f]*)"
+# GNU as actually accepts `0x` on its own, but we won't support that
+_HEX_NUMBER: str = r"(?:(?:[-+~][ \t]*)*0x[0-9a-f]+)"
 _DEC_NUMBER: str = r"(?:(?:[-+~][ \t]*)*[0-9]+)"
 _BIN_NUMBER: str = r"(?:(?:[-+~][ \t]*)*0b[01]+)"
 
@@ -49,7 +47,7 @@ _OFFSET: str = r"(?:offset)"
 
 _PTR: str = r"(?:ptr)"
 
-# TODO: OWORD TBYTE MMWORD and so on.
+# TODO: FWORD OWORD TBYTE MMWORD and so on.
 _WIDTH: str = rf"(?:(?:byte|word|dword|qword|xmmword|ymmword|zmmword)(?:[ \t]+{_PTR})?)"
 
 _MEMORY_OPERAND_MODIFIER: str = rf"(?:{_WIDTH}|{_OFFSET})"
@@ -65,26 +63,31 @@ _CONSTANT_EXPRESSION: str = rf"(?:(?:{_CONSTANT}(?:[ \t]*{_OPERATOR}[ \t]*{_CONS
 
 _SEGMENT_COLON: str = rf"(?:(?P<OP_NUM_PLACEHOLDER_segment>{_SEGMENT_REGISTER})[ \t]*:)"
 
-_INDEX_SCALE: str = rf"(?:(?:\+[ \t]*)*(?:{_REGISTER})(?:[ \t]*\*[ \t]*{_CONSTANT_EXPRESSION})?)?"
+_INDEX_SCALE: str = rf"(?:(?:\+[ \t]*)*(?P<OP_NUM_PLACEHOLDER_PERMUTATION_PLACEHOLDER_index>{_REGISTER})(?:[ \t]*\*[ \t]*(?P<OP_NUM_PLACEHOLDER_PERMUTATION_PLACEHOLDER_scale>(?:0x)?(?:1|2|4|8|)))?)"
 
 _ZERO_OR_MORE_OPEN_BRACKETS: str = r"(?:(?:\[(?:[ \t]*\[)*)?)"
 _ZERO_OR_MORE_CLOSE_BRACKETS: str = r"(?:(?:\](?:[ \t]*\])*)?)"
 
 # Do base and displacement even need to be separated out?
-_BASE: str = rf"(?:{_REGISTER})"
+_BASE: str = rf"(?P<OP_NUM_PLACEHOLDER_PERMUTATION_PLACEHOLDER_base>{_REGISTER})"
 
-_DISPLACEMENT: str = rf"(?:{_CONSTANT_EXPRESSION})"
+_DISPLACEMENT: str = rf"(?P<OP_NUM_PLACEHOLDER_PERMUTATION_PLACEHOLDER_displacement>{_CONSTANT_EXPRESSION})"
 
-# XXX: Displacement can be any number of constant expressions on either side of a component
-_EFFECTIVE_ADDRESS_BASE_INDEX_SCALE_DISPLACEMENT_FORM: str = rf"(?:(?:{_CONSTANT_EXPRESSION}[ \t]*)(?:\[[ \t]*)*(?:{_REGISTER}[ \t]*(?:\+[ \t]*)*)?(?:(?:{_REGISTER}[ \t]*)(?:\*[ \t]*{_CONSTANT_EXPRESSION}[ \t]*)?)?(?:{_CONSTANT_EXPRESSION}[ \t]*)(?:[ \t]*\])*)"
-
-def permute_ea(components: list[str]) -> list[str]:
-    return ["[ \t]*".join(p) for p in permutations(components)]
-
-_EFFECTIVE_ADDRESS_COMPONENT_PERMUTATIONS: list[str] = permute_ea([_DISPLACEMENT, _ZERO_OR_MORE_OPEN_BRACKETS, _BASE, _INDEX_SCALE, _DISPLACEMENT, _ZERO_OR_MORE_CLOSE_BRACKETS])
+def permute_ea() -> list[str]:
+    permutations: list[list[str]] = [
+        [_BASE],
+        [_BASE, _INDEX_SCALE, _DISPLACEMENT],
+        [_INDEX_SCALE],
+        [_INDEX_SCALE, _BASE, _DISPLACEMENT],
+        [_INDEX_SCALE, _DISPLACEMENT],
+        [_BASE, _DISPLACEMENT],
+        [_DISPLACEMENT],
+        [_DISPLACEMENT, _BASE, _INDEX_SCALE],
+    ]
+    return [r'[ \t\]\[+]*'.join(p).replace("PERMUTATION_PLACEHOLDER", f"permutation_{i}") for i, p in enumerate(permutations)]
 
 # TODO: All the other forms of memory operands
-_EFFECTIVE_ADDRESS: str = rf"(?:(?:{_SEGMENT_COLON}[ \t]*)?(?:{_EFFECTIVE_ADDRESS_BASE_INDEX_SCALE_DISPLACEMENT_FORM}))"
+_EFFECTIVE_ADDRESS: str = rf"(?:(?:{_SEGMENT_COLON}[ \t]*)?[\[\] \t]*(?:{'|'.join(permute_ea())})[\[\] \t]*)"
 
 # XXX: This will allow `offset qword ptrfs:0x10`
 _MEMORY_OPERAND: str = rf"(?:(?:{_MEMORY_OPERAND_MODIFIER_SEQUENCE}[ \t]*)?{_EFFECTIVE_ADDRESS})"
