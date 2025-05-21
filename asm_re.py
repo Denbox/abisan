@@ -1,3 +1,7 @@
+_OPERATOR: str = r"(?:[-+*/^&<>%|!]|<<|>>)"
+
+_LABEL: str = r"(?:[a-z._][a-z0-9.@_]*)"
+
 _MNEMONIC: str = r"(?P<mnemonic>[a-z][a-z0-9]+)"
 
 # GNU as actually accepts `0x` on its own, but we won't support that
@@ -6,6 +10,14 @@ _DEC_NUMBER: str = r"(?:(?:[-+~][ \t]*)*[0-9]+)"
 _BIN_NUMBER: str = r"(?:(?:[-+~][ \t]*)*0b[01]+)"
 
 _CHAR_CONSTANT: str = r"(?:(?:[-+~][ \t]*)*'.'|'\\.')"
+
+_IMMEDIATE: str = rf"(?:\$?(?:{_HEX_NUMBER}|{_DEC_NUMBER}|{_BIN_NUMBER}|{_CHAR_CONSTANT}))"
+
+_CONSTANT: str = rf"(?:{_LABEL}|{_IMMEDIATE})"
+
+_CONSTANT_EXPRESSION: str = rf"(?:(?:{_CONSTANT}(?:[ \t]*{_OPERATOR}[ \t]*{_CONSTANT})*)?)"
+
+_INTEL_DISPLACEMENT: str = rf"(?P<OP_NUM_PLACEHOLDER_PERMUTATION_PLACEHOLDER_displacement>{_CONSTANT_EXPRESSION})"
 
 # Directly lifted from capstone
 # https://github.com/capstone-engine/capstone/blob/42fbce6c524a3a57748f9de2b5460a7135e236c1/bindings/python/capstone/x86_const.py#L222
@@ -22,14 +34,15 @@ REGISTERS: tuple[str, ...] = ('ah', 'al', 'ax', 'bh', 'bl', 'bp', 'bpl', 'bx', '
 
 _REGISTER: str = rf"(?:%?(?:{'|'.join(REGISTERS)}))"
 
-_SEGMENT_REGISTER: str = rf"(?:{'|'.join(SEGMENT_REGISTERS)})"
+_SEGMENT_REGISTER: str = rf"(?:%?{'|'.join(SEGMENT_REGISTERS)})"
 
-_LABEL: str = r"(?:[a-z._][a-z0-9.@_]*)"
+_SEGMENT_COLON: str = rf"(?:(?P<OP_NUM_PLACEHOLDER_segment>{_SEGMENT_REGISTER})[ \t]*:)"
 
 _LABEL_STATEMENT: str = rf"(?:(?P<label>{_LABEL})[ \t]*:)"
 
 _DIRECTIVE: str = r"(?:\.[a-z._][a-z0-9._]*)"
 
+_INTEL_BASE: str = rf"(?P<OP_NUM_PLACEHOLDER_PERMUTATION_PLACEHOLDER_base>{_REGISTER})"
 
 # XXX: This is wrong because it captures comments.
 # XXX: Also, maybe a directive can have a first operand that begins with a ':'
@@ -42,4 +55,57 @@ _LINE_PREFIX: str = r"\A(?:[ \t]*)"
 
 _LINE_SUFFIX: str = rf"(?:[ \t]*{_COMMENT}?\n?)\Z"
 
-_OFFSET: str = r"(?:offset)"
+_INSTRUCTION_PREFIX: str = "(?:rep(?:n?[ez])?|lock|notrack|cs|data16|addr32)"
+
+# TODO: FWORD OWORD TBYTE MMWORD and so on
+_INTEL_WIDTH: str = r"(?:(?:byte|word|dword|qword|xmmword|ymmword|zmmword)(?:[ \t]+ptr)?)"
+
+_INTEL_MEMORY_OPERAND_MODIFIER: str = rf"(?:{_INTEL_WIDTH}|offset)"
+
+# XXX: This is intentional; GNU asm legitimately allows multiple WIDTH PTR pairs.
+_INTEL_MEMORY_OPERAND_MODIFIER_SEQUENCE: str = rf"(?:(?:{_INTEL_MEMORY_OPERAND_MODIFIER}(?:[ \t]+{_INTEL_MEMORY_OPERAND_MODIFIER})*)?)"
+
+_INTEL_INDEX_SCALE: str = rf"(?:(?:\+[ \t]*)*(?P<OP_NUM_PLACEHOLDER_PERMUTATION_PLACEHOLDER_index>{_REGISTER})(?:[ \t]*\*[ \t]*(?P<OP_NUM_PLACEHOLDER_PERMUTATION_PLACEHOLDER_scale>(?:0x)?(?:1|2|4|8)))?)"
+
+def intel_permute_ea() -> list[str]:
+    permutations: list[list[str]] = [
+        [_INTEL_BASE],
+        [_INTEL_BASE, _INTEL_INDEX_SCALE, _INTEL_DISPLACEMENT],
+        [_INTEL_INDEX_SCALE, _INTEL_BASE, _INTEL_DISPLACEMENT],
+        [_INTEL_BASE, _INTEL_DISPLACEMENT],
+        [_INTEL_INDEX_SCALE, _INTEL_DISPLACEMENT],
+        [_INTEL_DISPLACEMENT],
+        [_INTEL_DISPLACEMENT, _INTEL_BASE, _INTEL_INDEX_SCALE],
+        [_INTEL_DISPLACEMENT, _INTEL_INDEX_SCALE, _INTEL_BASE],
+        [_INTEL_DISPLACEMENT, _INTEL_BASE],
+    ]
+    return [r'[ \t\]\[+]*'.join(p).replace("PERMUTATION_PLACEHOLDER", f"permutation_{i}") for i, p in enumerate(permutations)]
+
+_INTEL_EFFECTIVE_ADDRESS: str = rf"(?:(?:{_SEGMENT_COLON}[ \t]*)?[\[\] \t]*(?:{'|'.join(intel_permute_ea())})[\[\] \t]*)"
+
+# XXX: This will allow `offset qword ptrfs:0x10`
+_INTEL_MEMORY_OPERAND: str = rf"(?:(?:{_INTEL_MEMORY_OPERAND_MODIFIER_SEQUENCE}[ \t]*)?{_INTEL_EFFECTIVE_ADDRESS})"
+
+_INTEL_OPERAND_1: str = rf"(?:{_IMMEDIATE}|{_REGISTER}|{_LABEL}|{_INTEL_MEMORY_OPERAND})".replace("OP_NUM_PLACEHOLDER", "operand_1")
+_INTEL_OPERAND_2: str = rf"(?:{_IMMEDIATE}|{_REGISTER}|{_LABEL}|{_INTEL_MEMORY_OPERAND})".replace("OP_NUM_PLACEHOLDER", "operand_2")
+_INTEL_OPERAND_3: str = rf"(?:{_IMMEDIATE}|{_REGISTER}|{_LABEL}|{_INTEL_MEMORY_OPERAND})".replace("OP_NUM_PLACEHOLDER", "operand_3")
+
+# XXX: This allows any number of instruction prefixes
+_INTEL_INSTRUCTION_STATEMENT: str = rf"(?:(?:{_INSTRUCTION_PREFIX}[ \t]+)*{_MNEMONIC}(?:[ \t]+(?P<operand_1>{_INTEL_OPERAND_1})(?:[ \t]*,[ \t]*(?P<operand_2>{_INTEL_OPERAND_2})(?:[ \t]*,[ \t]*(?P<operand_3>{_INTEL_OPERAND_3}))?)?)?)"
+
+_SCALE: str = r"(?:(?:0x)?(?:1|2|4|8))"
+
+_INTEL_LINE: str = rf"(?i)(?:{_LINE_PREFIX}(?:{_LABEL_STATEMENT}|{_DIRECTIVE_STATEMENT}|{_INTEL_INSTRUCTION_STATEMENT})?{_LINE_SUFFIX})"
+
+_ATT_INDEX_SCALE: str = rf"(?:(?:\+[ \t]*)*(?P<OP_NUM_PLACEHOLDER_PERMUTATION_PLACEHOLDER_index>{_REGISTER})(?:[ \t]*,[ \t]*(?P<OP_NUM_PLACEHOLDER_PERMUTATION_PLACEHOLDER_scale>{_SCALE}))?)"
+
+_ATT_MEMORY_OPERAND: str = rf"(?:(?:{_SEGMENT_COLON}[ \t]*)?(?:[ \t]*\*[ \t]*)?(?:(?P<OP_NUM_PLACEHOLDER_displacement>{_CONSTANT_EXPRESSION})[ \t]*)?(?:\(?[ \t]*(?P<OP_NUM_PLACEHOLDER_base>{_REGISTER})?(?:[ \t]*,[ \t]*(?:(?P<OP_NUM_PLACEHOLDER_index>{_REGISTER})([ \t]*,[ \t]*(?P<OP_NUM_PLACEHOLDER_scale>{_SCALE})?)?)?)?)?[ \t]*\)?)"
+
+_ATT_OPERAND_1: str = rf"(?:{_IMMEDIATE}|{_REGISTER}|{_LABEL}|{_ATT_MEMORY_OPERAND})".replace("OP_NUM_PLACEHOLDER", "operand_1")
+_ATT_OPERAND_2: str = rf"(?:{_IMMEDIATE}|{_REGISTER}|{_LABEL}|{_ATT_MEMORY_OPERAND})".replace("OP_NUM_PLACEHOLDER", "operand_2")
+_ATT_OPERAND_3: str = rf"(?:{_IMMEDIATE}|{_REGISTER}|{_LABEL}|{_ATT_MEMORY_OPERAND})".replace("OP_NUM_PLACEHOLDER", "operand_3")
+
+# XXX: This allows any number of instruction prefixes
+_ATT_INSTRUCTION_STATEMENT: str = rf"(?:(?:{_INSTRUCTION_PREFIX}[ \t]+)*{_MNEMONIC}(?:[ \t]+(?P<operand_1>{_ATT_OPERAND_1})(?:[ \t]*,[ \t]*(?P<operand_2>{_ATT_OPERAND_2})(?:[ \t]*,[ \t]*(?P<operand_3>{_ATT_OPERAND_3}))?)?)?)"
+
+_ATT_LINE: str = rf"(?i)(?:{_LINE_PREFIX}(?:{_LABEL_STATEMENT}|{_DIRECTIVE_STATEMENT}|{_ATT_INSTRUCTION_STATEMENT})?{_LINE_SUFFIX})"
