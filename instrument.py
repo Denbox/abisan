@@ -12,8 +12,6 @@ from capstone import Cs, CsInsn, x86_const
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import Section, SymbolTableSection
 
-# TODO: support segment registers
-
 from instruction import (
     Instruction,
     Register,
@@ -25,7 +23,6 @@ from instruction import (
     parse_number
 )
 
-# TODO: no taint check on rsp
 cs: Cs = Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
 cs.detail = True
 
@@ -46,8 +43,6 @@ TAINT_STATE_R15: int = 13
 TAINT_STATE_RBP: int = 14
 TAINT_STATE_EFLAGS: int = 15
 
-REDZONE_SIZE: int = 0x80
-
 class X86Syntax(Enum):
     ATT = 0
     INTEL = 1
@@ -55,38 +50,28 @@ class X86Syntax(Enum):
 
 @dataclasses.dataclass
 class Config:
-    redzone_enabled: bool
+    redzone_size: int
     stack_size: int
     syntax: X86Syntax
 
 
 def parse_tunable_envs() -> Config:
-    redzone_enabled: bool = True
+    redzone_size: int = 0x80
     stack_size: int = 0x800000
-    syntax: X86Syntax = X86Syntax.ATT
 
-    redzone_enabled_match: re.Match[str] | None = re.match(
-        r"\A(?P<value>[0-9]+)", os.environ.get("ABISAN_TUNABLES_REDZONE_ENABLED", "")
+    redzone_size_match: re.Match[str] | None = re.match(
+        r"\A(?P<value>[0-9]+)\Z", os.environ.get("ABISAN_TUNABLES_REDZONE_SIZE", "")
     )
-    if redzone_enabled_match is not None:
-        redzone_enabled = bool(int(redzone_enabled_match["value"]))
+    if redzone_size_match is not None:
+        redzone_size = parse_number(redzone_size_match["value"].encode("ascii"))
 
     stack_size_match: re.Match[str] | None = re.match(
-        r"\A(?P<value>.+)", os.environ.get("ABISAN_TUNABLES_STACK_SIZE", "")
+        r"\A(?P<value>.+)\Z", os.environ.get("ABISAN_TUNABLES_STACK_SIZE", "")
     )
     if stack_size_match is not None:
         stack_size = parse_number(stack_size_match["value"].encode("ascii"))
 
-    syntax_match: re.Match[str] | None = re.match(
-        r"\A(?P<value>intel|att)\Z", os.environ.get("ABISAN_TUNABLES_SYNTAX", "")
-    )
-    if syntax_match is not None:
-        if syntax_match["value"] == "att":
-            syntax = X86Syntax.ATT
-        elif syntax_match["value"] == "intel":
-            syntax = X86Syntax.INTEL
-
-    return Config(redzone_enabled, stack_size, syntax)
+    return Config(redzone_size, stack_size, X86Syntax.ATT)
 
 
 def serialize_instructions(instructions: list[Instruction], config: Config) -> bytes:
@@ -107,8 +92,6 @@ def get_memory_operand(
     mnemonic: bytes = tokens[0].lower()
     assert mnemonic != b"lea"
 
-    # TODO: Support single-quoted [ and , and ptr and offset
-    # TODO: support rip relative movs
     if config.syntax == X86Syntax.INTEL:
         for operand in (token.strip() for token in tokens[1].split(b",")):
             if b"[" in operand or b":" in operand:
@@ -187,7 +170,6 @@ def remove_comment(line: bytes) -> bytes:
     if len(split_line) > 0:
         if split_line[0].endswith(b"'") and split_line[1].startswith(b"'"):
             return split_line[0] + b"#" + remove_comment(split_line[1])
-        # TODO: Handle '#' in strings.
         return split_line[0]
     return line
 
@@ -889,16 +871,10 @@ def generate_cmov_instrumentation(
         Instruction(b"push", Register(b"rbx")),
         Instruction(b"lea", Register(b"rbx"), get_memory_operand(line, insn, config)),
         Instruction(b"mov", Register(b"rax"), Register(b"rsp")),
-        *(
-            [
-                Instruction(
-                    b"add",
-                    Register(b"rax"),
-                    Immediate(hex(REDZONE_SIZE).encode("ascii")),
-                )
-            ]
-            if config.redzone_enabled
-            else []
+        Instruction(
+            b"add",
+            Register(b"rax"),
+            Immediate(hex(config.redzone_size).encode("ascii")),
         ),
         Instruction(b"cmp", Register(b"rax"), Register(b"rsp")),
         Instruction(b"setb", Register(b"bl")),
@@ -906,9 +882,7 @@ def generate_cmov_instrumentation(
             b"add",
             Register(b"rax"),
             Immediate(
-                hex(
-                    config.stack_size - (REDZONE_SIZE if config.redzone_enabled else 0)
-                ).encode("ascii")
+                hex(config.stack_size - config.redzone_size).encode("ascii")
             ),
         ),
         Instruction(b"cmp", Register(b"rax"), Register(b"rsp")),
@@ -935,16 +909,10 @@ def generate_generic_memory_instrumentation(
             Register(b"rax"),
             get_memory_operand(line, insn, config),
         ),
-        *(
-            [
-                Instruction(
-                    b"add",
-                    Register(b"rax"),
-                    Immediate(hex(REDZONE_SIZE).encode("ascii")),
-                )
-            ]
-            if config.redzone_enabled
-            else []
+        Instruction(
+            b"add",
+            Register(b"rax"),
+            Immediate(hex(config.redzone_size).encode("ascii")),
         ),
         Instruction(b"cmp", Register(b"rax"), Register(b"rsp")),
         Instruction(b"setb", Register(b"bl")),
@@ -952,9 +920,7 @@ def generate_generic_memory_instrumentation(
             b"add",
             Register(b"rax"),
             Immediate(
-                hex(
-                    config.stack_size - (REDZONE_SIZE if config.redzone_enabled else 0)
-                ).encode("ascii")
+                hex(config.stack_size - config.redzone_size).encode("ascii")
             ),
         ),
         Instruction(b"cmp", Register(b"rax"), Register(b"rsp")),
@@ -999,16 +965,10 @@ def generate_reg_taint_check(
             Instruction(
                 insn.mnemonic.encode("ascii"), Register(b"rax"), Register(b"rbx")
             ),
-            *(
-                [
-                    Instruction(
-                        b"add",
-                        Register(b"rbx"),
-                        Immediate(hex(REDZONE_SIZE).encode("ascii")),
-                    )
-                ]
-                if config.redzone_enabled
-                else []
+            Instruction(
+                b"add",
+                Register(b"rbx"),
+                Immediate(hex(config.redzone_size).encode("ascii")),
             ),
             Instruction(b"cmp", Register(b"rbx"), Register(b"rsp")),
             Instruction(b"setb", Register(b"bl")),
