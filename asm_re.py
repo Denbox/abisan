@@ -81,7 +81,7 @@ def intel_permute_ea() -> list[str]:
     ]
     return [r'[ \t\]\[+]*'.join(p).replace("PERMUTATION_PLACEHOLDER", f"permutation_{i}") for i, p in enumerate(permutations)]
 
-_INTEL_EFFECTIVE_ADDRESS: str = rf"(?:(?:{_SEGMENT_COLON}[ \t]*)?[\[\] \t]*(?:{'|'.join(intel_permute_ea())})[\[\] \t]*)"
+_INTEL_EFFECTIVE_ADDRESS: str = rf"(?:(?:{_SEGMENT_COLON}[ \t]*)?(?:[ \t]*(?P<OP_NUM_PLACEHOLDER_preceding_brackets>[\[\]]+)?[ \t]*)?(?:{'|'.join(intel_permute_ea())})(?:[ \t]*(?P<OP_NUM_PLACEHOLDER_trailing_brackets>[\[\]]+)?)?)"
 
 # XXX: This will allow `offset qword ptrfs:0x10`
 _INTEL_MEMORY_OPERAND: str = rf"(?:(?:{_INTEL_MEMORY_OPERAND_MODIFIER_SEQUENCE}[ \t]*)?{_INTEL_EFFECTIVE_ADDRESS})"
@@ -99,7 +99,7 @@ _INTEL_LINE: str = rf"(?i)(?:{_LINE_PREFIX}(?:{_LABEL_STATEMENT}|{_DIRECTIVE_STA
 
 _ATT_INDEX_SCALE: str = rf"(?:(?:\+[ \t]*)*(?P<OP_NUM_PLACEHOLDER_PERMUTATION_PLACEHOLDER_index>{_REGISTER})(?:[ \t]*,[ \t]*(?P<OP_NUM_PLACEHOLDER_PERMUTATION_PLACEHOLDER_scale>{_SCALE}))?)"
 
-_ATT_MEMORY_OPERAND: str = rf"(?:(?:{_SEGMENT_COLON}[ \t]*)?(?:[ \t]*\*[ \t]*)?(?:(?P<OP_NUM_PLACEHOLDER_displacement>{_CONSTANT_EXPRESSION})[ \t]*)?(?:\(?[ \t]*(?P<OP_NUM_PLACEHOLDER_base>{_REGISTER})?(?:[ \t]*,[ \t]*(?:(?P<OP_NUM_PLACEHOLDER_index>{_REGISTER})([ \t]*,[ \t]*(?P<OP_NUM_PLACEHOLDER_scale>{_SCALE})?)?)?)?)?[ \t]*\)?)"
+_ATT_MEMORY_OPERAND: str = rf"(?:(?:{_SEGMENT_COLON}[ \t]*)?(?:[ \t]*(?P<OP_NUM_PLACEHOLDER_direct_jump>\*)[ \t]*)?(?:(?P<OP_NUM_PLACEHOLDER_displacement>{_CONSTANT_EXPRESSION})[ \t]*)?(?:\(?[ \t]*(?P<OP_NUM_PLACEHOLDER_base>{_REGISTER})?(?:[ \t]*,[ \t]*(?:(?P<OP_NUM_PLACEHOLDER_index>{_REGISTER})([ \t]*,[ \t]*(?P<OP_NUM_PLACEHOLDER_scale>{_SCALE})?)?)?)?)?[ \t]*\)?)"
 
 _ATT_OPERAND_1: str = rf"(?:{_IMMEDIATE}|{_REGISTER}|{_LABEL}|{_ATT_MEMORY_OPERAND})".replace("OP_NUM_PLACEHOLDER", "operand_1")
 _ATT_OPERAND_2: str = rf"(?:{_IMMEDIATE}|{_REGISTER}|{_LABEL}|{_ATT_MEMORY_OPERAND})".replace("OP_NUM_PLACEHOLDER", "operand_2")
