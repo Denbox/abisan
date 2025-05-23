@@ -99,7 +99,7 @@ _INTEL_LINE: str = rf"(?i)(?:{_LINE_PREFIX}(?:{_LABEL_STATEMENT}|{_DIRECTIVE_STA
 
 _ATT_INDEX_SCALE: str = rf"(?:(?:\+[ \t]*)*(?P<OP_NUM_PLACEHOLDER_PERMUTATION_PLACEHOLDER_index>{_REGISTER})(?:[ \t]*,[ \t]*(?P<OP_NUM_PLACEHOLDER_PERMUTATION_PLACEHOLDER_scale>{_SCALE}))?)"
 
-_ATT_MEMORY_OPERAND: str = rf"(?:(?:{_SEGMENT_COLON}[ \t]*)?(?:[ \t]*(?P<OP_NUM_PLACEHOLDER_direct_jump>\*)[ \t]*)?(?:(?P<OP_NUM_PLACEHOLDER_displacement>{_CONSTANT_EXPRESSION})[ \t]*)?(?:\(?[ \t]*(?P<OP_NUM_PLACEHOLDER_base>{_REGISTER})?(?:[ \t]*,[ \t]*(?:(?P<OP_NUM_PLACEHOLDER_index>{_REGISTER})([ \t]*,[ \t]*(?P<OP_NUM_PLACEHOLDER_scale>{_SCALE})?)?)?)?)?[ \t]*\)?)"
+_ATT_MEMORY_OPERAND: str = rf"(?:(?:{_SEGMENT_COLON}[ \t]*)?(?:[ \t]*(?P<OP_NUM_PLACEHOLDER_direct_jump>\*)[ \t]*)?(?:(?P<OP_NUM_PLACEHOLDER_displacement>{_CONSTANT_EXPRESSION})[ \t]*)?(?:(?P<OP_NUM_PLACEHOLDER_preceding_parenthesis>\()?[ \t]*(?P<OP_NUM_PLACEHOLDER_base>{_REGISTER})?(?:[ \t]*,[ \t]*(?:(?P<OP_NUM_PLACEHOLDER_index>{_REGISTER})([ \t]*,[ \t]*(?P<OP_NUM_PLACEHOLDER_scale>{_SCALE})?)?)?)?)?[ \t]*(?P<OP_NUM_PLACEHOLDER_trailing_parenthesis>\))?)"
 
 _ATT_OPERAND_1: str = rf"(?:{_IMMEDIATE}|{_REGISTER}|{_LABEL}|{_ATT_MEMORY_OPERAND})".replace("OP_NUM_PLACEHOLDER", "operand_1")
 _ATT_OPERAND_2: str = rf"(?:{_IMMEDIATE}|{_REGISTER}|{_LABEL}|{_ATT_MEMORY_OPERAND})".replace("OP_NUM_PLACEHOLDER", "operand_2")
