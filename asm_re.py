@@ -58,12 +58,12 @@ _LINE_SUFFIX: str = rf"(?:[ \t]*{_COMMENT}?\n?)\Z"
 _INSTRUCTION_PREFIX: str = "(?:rep(?:n?[ez])?|lock|notrack|cs|data16|addr32)"
 
 # TODO: FWORD OWORD TBYTE MMWORD and so on
-_INTEL_WIDTH: str = r"(?:(?:byte|word|dword|qword|xmmword|ymmword|zmmword)(?:[ \t]+ptr)?)"
+_INTEL_WIDTH: str = r"(?:(?P<_OP_NUM_PLACEHOLDER_width>(?:byte|word|dword|qword|xmmword|ymmword|zmmword)(?:[ \t]+ptr)?))"
 
 _INTEL_MEMORY_OPERAND_MODIFIER: str = rf"(?:{_INTEL_WIDTH}|offset)"
 
-# XXX: This is intentional; GNU asm legitimately allows multiple WIDTH PTR pairs.
-_INTEL_MEMORY_OPERAND_MODIFIER_SEQUENCE: str = rf"(?:(?:{_INTEL_MEMORY_OPERAND_MODIFIER}(?:[ \t]+{_INTEL_MEMORY_OPERAND_MODIFIER})*)?)"
+# XXX: GNU asm legitimately allows multiple WIDTH PTR pairs. We do not permit them here in order to easily capture the width of an operand.
+_INTEL_MEMORY_OPERAND_MODIFIER_SEQUENCE: str = rf"(?:(?:{_INTEL_MEMORY_OPERAND_MODIFIER})?)"
 
 _INTEL_INDEX_SCALE: str = rf"(?:(?:\+[ \t]*)*(?P<OP_NUM_PLACEHOLDER_PERMUTATION_PLACEHOLDER_index>{_REGISTER})(?:[ \t]*\*[ \t]*(?P<OP_NUM_PLACEHOLDER_PERMUTATION_PLACEHOLDER_scale>(?:0x)?(?:1|2|4|8)))?)"
 
