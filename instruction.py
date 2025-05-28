@@ -7,8 +7,8 @@ import asm_re
 # Serialize Instruction instances into Intel or AT&T syntax
 # Assumes that caller will order operands for Instruction.operands in destination, source order
 # Ex.
-# Instruction(b"mov",[Register(b"r11"),Immediate(b"0x10")]).serialize_intel() == "     mov r11, 0x10"
-# Instruction(b"mov",[Register(b"r11"),Immediate(b"0x10")]).serialize_att() ==   "     mov $0x10, %r11"
+# Instruction(b"mov",Register(b"r11"),Immediate(b"0x10")).serialize_intel() == "     mov r11, 0x10"
+# Instruction(b"mov",Register(b"r11"),Immediate(b"0x10")).serialize_att() ==   "     mov $0x10, %r11"
 
 
 def is_decimal(num: bytes) -> bool:
@@ -165,60 +165,50 @@ class EffectiveAddress:
         if components[f"operand_{operand_index}"] is None:
             raise ValueError(f"Operand {operand_index} not found in match object")
 
-        permutation_num: int = 0
-        while permutation_num < len(asm_re.intel_permute_ea()):
-            if any(
-                f"permutation_{permutation_num}" in key
-                for key in {
-                    k: v for k, v in components.groupdict().items() if v is not None
-                }.keys()
-            ):
-                break
-
-            permutation_num += 1
-
-        print(permutation_num)
-        print({k: v for k, v in components.groupdict().items() if v is not None})
-      
+        components_dict: dict[str, bytes | None] = components.groupdict()
+        found_component_keys: list[str] = list(
+            {k: v for k, v in components_dict.items() if v is not None}.keys()
+        )
+        permutation_num = next(
+            (
+                i
+                for i in range(len(asm_re.intel_permute_ea()))
+                if any(f"permutation_{i}" in key for key in found_component_keys)
+            ),
+            -1,
+        )
+        if permutation_num < 0:
+            raise ValueError("No matching permutations found for intel memory operand")
 
         width: EAWidth | None = None
         if unparsed_width is not None:
             width = EAWidth.deserialize_intel(unparsed_width)
 
-        unparsed_base: bytes | None = None
-        try:
-            unparsed_base = components[f"operand_{operand_index}_permutation_{permutation_num}_base"]
-        except IndexError:
-            pass
-
+        unparsed_base: bytes | None = components_dict.get(
+            f"operand_{operand_index}_permutation_{permutation_num}_base"
+        )
         base: Register | None = (
             Register(unparsed_base) if unparsed_base is not None else None
         )
 
-        unparsed_index: bytes | None = None
-        try:
-            unparsed_index = components[f"operand_{operand_index}_permutation_{permutation_num}_index"]
-        except IndexError:
-            pass
-
+        unparsed_index: bytes | None = components_dict.get(
+            f"operand_{operand_index}_permutation_{permutation_num}_index"
+        )
         index: Register | None = (
             Register(unparsed_index) if unparsed_index is not None else None
         )
 
-        unparsed_scale: bytes | None = None
-        try:
-            unparsed_scale = components[
-                f"operand_{operand_index}_permutation_{permutation_num}_scale"
-            ]
-        except IndexError:
-            pass
-        
+        unparsed_scale: bytes | None = components_dict.get(
+            f"operand_{operand_index}_permutation_{permutation_num}_scale"
+        )
         scale: int | None = (
             parse_number(unparsed_scale) if unparsed_scale is not None else None
         )
 
-        unparsed_mem_op_sequence: bytes | None = components[f"operand_{operand_index}_mem_op_sequence"]
-       
+        unparsed_mem_op_sequence: bytes | None = components[
+            f"operand_{operand_index}_mem_op_sequence"
+        ]
+
         offset: Constant | None = None
         if (
             unparsed_mem_op_sequence is not None
@@ -233,17 +223,12 @@ class EffectiveAddress:
 
         displacement: Constant | None = None
         if offset is None:
-            unparsed_displacement: bytes | None = None
-            try:
-                unparsed_displacement = components[
-                    f"operand_{operand_index}_permutation_{permutation_num}_displacement"
-                ]
-            except IndexError:
-                pass
+            unparsed_displacement: bytes | None = components_dict.get(
+                f"operand_{operand_index}_permutation_{permutation_num}_displacement"
+            )
             if unparsed_displacement is not None:
                 displacement = Constant(unparsed_displacement)
 
-        print(width, base, index, scale, displacement, offset)
         return EffectiveAddress(
             width=width,
             base=base,
@@ -280,8 +265,6 @@ class EffectiveAddress:
             parse_number(unparsed_scale) if unparsed_scale is not None else None
         )
 
-     
-
         displacement: Constant | None = None
         unparsed_displacement: bytes | None = components[
             f"operand_{operand_index}_displacement"
@@ -289,12 +272,11 @@ class EffectiveAddress:
         if unparsed_displacement is not None:
             displacement = Constant(unparsed_displacement)
 
-
         if base is not None:
             base.val = base.val.strip(b"%")
         if index is not None:
             index.val = index.val.strip(b"%")
-            
+
         return EffectiveAddress(
             width=width,
             base=base,

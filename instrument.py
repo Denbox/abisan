@@ -107,15 +107,15 @@ def get_memory_operand(
                 # TODO: Fix how we grab width, its horrendous
                 unparsed_width: bytes | None = None
                 mem_op_modifier_sequence: list[bytes] | None = (
-                    components[f"operand_{op_index}_mem_op_sequence"].lower().split(b" ")
-                    if components[f"operand_{op_index}_mem_op_sequence"]
-                    is not None
-                    else None
+                    None if components[f"operand_{op_index}_mem_op_sequence"] is None
+                    else components[f"operand_{op_index}_mem_op_sequence"].lower().split(b" ")
                 )
+
                 
                 if (mem_op_modifier_sequence is not None) and (b"ptr" in mem_op_modifier_sequence):
+                    i: int =  mem_op_modifier_sequence.index(b"ptr")
                     unparsed_width = b" ".join(mem_op_modifier_sequence[
-                        mem_op_modifier_sequence.index(b"ptr") - 1 :  mem_op_modifier_sequence.index(b"ptr") + 1
+                       i  - 1 :  i + 1
                     ])
                     
                 return EffectiveAddress.deserialize_intel(
