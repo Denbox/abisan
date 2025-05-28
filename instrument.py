@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import re
+import asm_re
 
 from enum import Enum
 
@@ -18,9 +19,9 @@ from instruction import (
     EffectiveAddress,
     Immediate,
     EAWidth,
-    Label,
+    Constant,
     JumpTarget,
-    parse_number
+    parse_number,
 )
 
 cs: Cs = Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
@@ -42,6 +43,7 @@ TAINT_STATE_R14: int = 12
 TAINT_STATE_R15: int = 13
 TAINT_STATE_RBP: int = 14
 TAINT_STATE_EFLAGS: int = 15
+
 
 class X86Syntax(Enum):
     ATT = 0
@@ -86,72 +88,56 @@ def get_memory_operand(
     line: bytes, insn: CsInsn, config: Config
 ) -> EffectiveAddress | None:
 
-    tokens: list[bytes] = line.split(maxsplit=1)
-    assert len(tokens) == 2
-
-    mnemonic: bytes = tokens[0].lower()
-    assert mnemonic != b"lea"
-
+    components: re.Match | None = None
     if config.syntax == X86Syntax.INTEL:
-        for operand in (token.strip() for token in tokens[1].split(b",")):
-            if b"[" in operand or b":" in operand:
+        components = re.match(asm_re._INTEL_LINE.encode("ascii"), line)
+    elif config.syntax == X86Syntax.ATT:
+        components = re.match(asm_re._ATT_LINE.encode("ascii"), line)
+    else:
+        assert False
 
-                # How should we handle instructions like:
-                # call [qword ptr 48[rax]]
-                while operand.startswith(b"[") and operand.endswith(b"]"):
-                    operand = operand.strip(b"[]")
+    if components is not None:
+        op_index: int = 1
+        while op_index <= 3:
+            if (
+                config.syntax == X86Syntax.INTEL
+                and components[f"operand_{op_index}_preceding_brackets"] is not None
+            ):
 
-                prefix_signaler: bytes
-                lower_operand: bytes = operand.lower()
-                prefix_signaler = next(
-                    (
-                        string
-                        for string in [b"ptr", b"offset"]
-                        if string in lower_operand
-                    ),
-                    b"",
+                # TODO: Fix how we grab width, its horrendous
+                unparsed_width: bytes | None = None
+                mem_op_modifier_sequence: list[bytes] | None = (
+                    components[f"operand_{op_index}_mem_op_sequence"].lower().split(b" ")
+                    if components[f"operand_{op_index}_mem_op_sequence"]
+                    is not None
+                    else None
+                )
+                
+                if (mem_op_modifier_sequence is not None) and (b"ptr" in mem_op_modifier_sequence):
+                    unparsed_width = b" ".join(mem_op_modifier_sequence[
+                        mem_op_modifier_sequence.index(b"ptr") - 1 :  mem_op_modifier_sequence.index(b"ptr") + 1
+                    ])
+                    
+                return EffectiveAddress.deserialize_intel(
+                    unparsed_width, components, op_index
                 )
 
-           # NOT IDEAL; FIX WITH BEN
-                if len(prefix_signaler) >= 0:
-                    match prefix_signaler:
-                        case b"ptr":
-                            return EffectiveAddress.deserialize_intel(
-                                operand[:lower_operand.find(prefix_signaler) + len(prefix_signaler)],
-                                operand[lower_operand.find(prefix_signaler) + len(prefix_signaler) :],
-                            )
-                        case b"offset":
-                            prefix, memory_operand = operand.split(b"[", maxsplit=1)
-                            return EffectiveAddress.deserialize_intel(
-                                prefix,
-                                memory_operand
-                            )
-                        case _:
-                            raise ValueError("Invalid prefix to effective address offset")
-                else:
-                    return EffectiveAddress.deserialize_intel(b"", operand)
+            elif (
+                config.syntax == X86Syntax.ATT
+                and components[f"operand_{op_index}_preceding_parenthesis"] is not None
+            ):
+                # XXX: Does not handle prefixes like "rep"
+                unparsed_width = components["mnemonic"].strip()[
+                    len(insn.mnemonic) : len(insn.mnemonic) + 1
+                ]
+                if unparsed_width is not None and len(unparsed_width) == 0:
+                    unparsed_width = None
 
-        raise ValueError("Invalid intel memory operand: " + line.decode("ascii"))
-
-    if config.syntax == X86Syntax.ATT:
-        # Remove mnemonic
-        # Starting left to right, try and parse as a memory operand, if we reach the potential memory operand, yay!
-        # Otherwise, consume everything up until the next comma
-
-        mem_operand: bytes = line.lstrip()[len(mnemonic) :]
-        ea: EffectiveAddress | None
-        width: bytes = tokens[0].lstrip()[len(insn.mnemonic) : len(insn.mnemonic) + 1]
-
-        while (
-            ea := EffectiveAddress.deserialize_att(width, mem_operand.lstrip())
-        ) is None:
-            if b"," in mem_operand and not mem_operand.endswith(b","):
-                before_first_comma = mem_operand.split(b",")[0]
-                mem_operand = mem_operand[len(before_first_comma) + 1 :]
-            else:  # No operands remaining
-                assert False
-        return ea
-    assert False
+                return EffectiveAddress.deserialize_att(
+                    unparsed_width, components, op_index
+                )
+            op_index += 1
+    raise ValueError("Invalid line provided")
 
 
 def get_global_name(line: bytes) -> bytes | None:
@@ -881,15 +867,13 @@ def generate_cmov_instrumentation(
         Instruction(
             b"add",
             Register(b"rax"),
-            Immediate(
-                hex(config.stack_size - config.redzone_size).encode("ascii")
-            ),
+            Immediate(hex(config.stack_size - config.redzone_size).encode("ascii")),
         ),
         Instruction(b"cmp", Register(b"rax"), Register(b"rsp")),
         Instruction(b"seta", Register(b"bh")),
         Instruction(b"add", Register(b"bl"), Register(b"bh")),
         Instruction(b"cmp", Register(b"bl"), Immediate(b"2")),
-        Instruction(b"je", JumpTarget(Label(b"abisan_fail_mov_below_rsp"))),
+        Instruction(b"je", JumpTarget(Constant(b"abisan_fail_mov_below_rsp"))),
         Instruction(b"pop", Register(b"rbx")),
         Instruction(b"pop", Register(b"rax")),
         Instruction(b"popfq"),
@@ -919,15 +903,13 @@ def generate_generic_memory_instrumentation(
         Instruction(
             b"add",
             Register(b"rax"),
-            Immediate(
-                hex(config.stack_size - config.redzone_size).encode("ascii")
-            ),
+            Immediate(hex(config.stack_size - config.redzone_size).encode("ascii")),
         ),
         Instruction(b"cmp", Register(b"rax"), Register(b"rsp")),
         Instruction(b"seta", Register(b"bh")),
         Instruction(b"add", Register(b"bl"), Register(b"bh")),
         Instruction(b"cmp", Register(b"bl"), Immediate(b"2")),
-        Instruction(b"je", JumpTarget(Label(b"abisan_fail_mov_below_rsp"))),
+        Instruction(b"je", JumpTarget(Constant(b"abisan_fail_mov_below_rsp"))),
         Instruction(b"pop", Register(b"rbx")),
         Instruction(b"pop", Register(b"rax")),
         Instruction(b"popfq"),
@@ -976,9 +958,11 @@ def generate_reg_taint_check(
                 b"lea",
                 Register(b"rax"),
                 EffectiveAddress(
-                    offset=Label(b"abisan_taint_state"),
+                    offset=Constant(b"abisan_taint_state"),
                     base=Register(b"rip"),
-                    displacement=cs_to_taint_idx(register_normalize(r)),
+                    displacement=Constant(
+                        str(cs_to_taint_idx(register_normalize(r))).encode("ascii")
+                    ),
                 ),
             ),
             Instruction(
@@ -998,7 +982,7 @@ def generate_reg_taint_check(
             Instruction(
                 b"je",
                 JumpTarget(
-                    Label(b"abisan_fail_taint_" + cs.reg_name(r).encode("ascii"))
+                    Constant(b"abisan_fail_taint_" + cs.reg_name(r).encode("ascii"))
                 ),
             ),
             Instruction(b"pop", Register(b"rbx")),
@@ -1017,9 +1001,11 @@ def generate_reg_taint_check(
                 b"lea",
                 Register(b"rax"),
                 EffectiveAddress(
-                    offset=Label(b"abisan_taint_state"),
+                    offset=Constant(b"abisan_taint_state"),
                     base=Register(b"rip"),
-                    displacement=cs_to_taint_idx(register_normalize(r)),
+                    displacement=Constant(
+                        str(cs_to_taint_idx(register_normalize(r))).encode("ascii")
+                    ),
                 ),
             ),
             Instruction(
@@ -1036,7 +1022,7 @@ def generate_reg_taint_check(
             Instruction(
                 b"jne",
                 JumpTarget(
-                    Label(b"abisan_fail_taint_" + cs.reg_name(r).encode("ascii"))
+                    Constant(b"abisan_fail_taint_" + cs.reg_name(r).encode("ascii"))
                 ),
             ),
             Instruction(b"pop", Register(b"rax")),
@@ -1055,9 +1041,11 @@ def generate_generic_reg_taint_update(r: int) -> list[Instruction]:
             b"lea",
             Register(b"rax"),
             EffectiveAddress(
-                offset=Label(b"abisan_taint_state"),
+                offset=Constant(b"abisan_taint_state"),
                 base=Register(b"rip"),
-                displacement=cs_to_taint_idx(register_normalize(r)),
+                displacement=Constant(
+                    str(cs_to_taint_idx(register_normalize(r))).encode("ascii")
+                ),
             ),
         ),
         Instruction(
@@ -1081,9 +1069,11 @@ def generate_cmov_reg_taint_update(insn: CsInsn, r: int) -> list[Instruction]:
             b"lea",
             Register(b"rax"),
             EffectiveAddress(
-                offset=Label(b"abisan_taint_state"),
+                offset=Constant(b"abisan_taint_state"),
                 base=Register(b"rip"),
-                displacement=cs_to_taint_idx(register_normalize(r)),
+                displacement=Constant(
+                    str(cs_to_taint_idx(register_normalize(r))).encode("ascii")
+                ),
             ),
         ),
         Instruction(
@@ -1119,7 +1109,7 @@ TAINT_AFTER_CALL: list[Instruction] = [
         EffectiveAddress(
             width=EAWidth.BYTE_PTR,
             base=Register(b"rip"),
-            offset=Label(b"abisan_taint_state"),
+            offset=Constant(b"abisan_taint_state"),
         ),
     ),
     Instruction(
@@ -1127,7 +1117,7 @@ TAINT_AFTER_CALL: list[Instruction] = [
         EffectiveAddress(
             width=EAWidth.BYTE_PTR,
             base=Register(b"rdi"),
-            displacement=TAINT_STATE_RAX,
+            displacement=Constant(str(TAINT_STATE_RAX).encode("ascii")),
         ),
         Immediate(b"0"),
     ),
@@ -1136,16 +1126,47 @@ TAINT_AFTER_CALL: list[Instruction] = [
         EffectiveAddress(
             width=EAWidth.BYTE_PTR,
             base=Register(b"rdi"),
-            displacement=TAINT_STATE_RCX,
+            displacement=Constant(str(TAINT_STATE_RCX).encode("ascii")),
+        ),
+        Immediate(b"0xff"),
+    ),
+    Instruction(
+        b"mov",
+        EffectiveAddress(
+            width=EAWidth.BYTE_PTR,
+            base=Register(b"rdi"),
+            displacement=Constant(str(TAINT_STATE_RDX).encode("ascii")),
+        ),
+        Immediate(b"0xff"),
+    ),
+    Instruction(
+        b"mov",
+        EffectiveAddress(
+            width=EAWidth.BYTE_PTR,
+            base=Register(b"rdi"),
+            displacement=Constant(str(TAINT_STATE_RDI).encode("ascii")),
+        ),
+        Immediate(b"0xff"),
+    ),
+    Instruction(
+        b"mov",
+        EffectiveAddress(
+            width=EAWidth.BYTE_PTR,
+            base=Register(b"rdi"),
+            displacement=Constant(str(TAINT_STATE_RSI).encode("ascii")),
+        ),
+        Immediate(b"0xff"),
+    ),
+    Instruction(
+        b"mov",
+        EffectiveAddress(
+            width=EAWidth.BYTE_PTR,
+            base=Register(b"rdi"),
+            displacement=Constant(
+                str(
+                    TAINT_STATE_R8,
+                ).encode("ascii")
             ),
-        Immediate(b"0xff"),
-    ),
-    Instruction(
-        b"mov",
-        EffectiveAddress(
-            width=EAWidth.BYTE_PTR,
-            base=Register(b"rdi"),
-            displacement=TAINT_STATE_RDX,
         ),
         Immediate(b"0xff"),
     ),
@@ -1154,7 +1175,11 @@ TAINT_AFTER_CALL: list[Instruction] = [
         EffectiveAddress(
             width=EAWidth.BYTE_PTR,
             base=Register(b"rdi"),
-            displacement=TAINT_STATE_RDI,
+            displacement=Constant(
+                str(
+                    TAINT_STATE_R9,
+                ).encode("ascii")
+            ),
         ),
         Immediate(b"0xff"),
     ),
@@ -1163,7 +1188,7 @@ TAINT_AFTER_CALL: list[Instruction] = [
         EffectiveAddress(
             width=EAWidth.BYTE_PTR,
             base=Register(b"rdi"),
-            displacement=TAINT_STATE_RSI,
+            displacement=Constant(str(TAINT_STATE_R10).encode("ascii")),
         ),
         Immediate(b"0xff"),
     ),
@@ -1172,34 +1197,7 @@ TAINT_AFTER_CALL: list[Instruction] = [
         EffectiveAddress(
             width=EAWidth.BYTE_PTR,
             base=Register(b"rdi"),
-            displacement=TAINT_STATE_R8,
-        ),
-        Immediate(b"0xff"),
-    ),
-    Instruction(
-        b"mov",
-        EffectiveAddress(
-            width=EAWidth.BYTE_PTR,
-            base=Register(b"rdi"),
-            displacement=TAINT_STATE_R9,
-        ),
-        Immediate(b"0xff"),
-    ),
-    Instruction(
-        b"mov",
-        EffectiveAddress(
-            width=EAWidth.BYTE_PTR,
-            base=Register(b"rdi"),
-            displacement=TAINT_STATE_R10,
-        ),
-        Immediate(b"0xff"),
-    ),
-    Instruction(
-        b"mov",
-        EffectiveAddress(
-            width=EAWidth.BYTE_PTR,
-            base=Register(b"rdi"),
-            displacement=TAINT_STATE_R11,
+            displacement=Constant(str(TAINT_STATE_R11).encode("ascii")),
         ),
         Immediate(b"0xff"),
     ),
@@ -1244,11 +1242,13 @@ def main() -> None:
     # Assemble the result
     try:
         subprocess.run(
-            ["as", intermediate_file_name, "-o", intermediate_object_file_name], check=True
+            ["as", intermediate_file_name, "-o", intermediate_object_file_name],
+            check=True,
         )
     except subprocess.CalledProcessError:
         subprocess.run(
-            ["llvm-as", intermediate_file_name, "-o", intermediate_object_file_name], check=True
+            ["llvm-as", intermediate_file_name, "-o", intermediate_object_file_name],
+            check=True,
         )
 
     intermediate_labels: dict[bytes, CsInsn] = get_intermediate_labels(
@@ -1273,18 +1273,26 @@ def main() -> None:
                 output_instructions: list[Instruction] = []
                 if insn.op_count(capstone.CS_OP_MEM) > 0 and insn.mnemonic != "lea":
                     if insn.mnemonic.startswith("cmov"):
-                        output_instructions += generate_cmov_instrumentation(line, insn, config)
+                        output_instructions += generate_cmov_instrumentation(
+                            line, insn, config
+                        )
                     else:
-                        output_instructions += generate_generic_memory_instrumentation(line, insn, config)
+                        output_instructions += generate_generic_memory_instrumentation(
+                            line, insn, config
+                        )
 
                 if needs_taint_check_for_read(insn):
                     for r in get_registers_read(insn):
-                        output_instructions += generate_reg_taint_check(line, insn, r, config)
+                        output_instructions += generate_reg_taint_check(
+                            line, insn, r, config
+                        )
 
                 if needs_taint_update_for_write(insn):
                     for r in get_registers_written(insn):
                         if insn.mnemonic.startswith("cmov"):
-                            output_instructions += generate_cmov_reg_taint_update(insn, r)
+                            output_instructions += generate_cmov_reg_taint_update(
+                                insn, r
+                            )
                         else:
                             output_instructions += generate_generic_reg_taint_update(r)
                 f.write(serialize_instructions(output_instructions, config))
@@ -1301,6 +1309,7 @@ def main() -> None:
                 config.syntax = X86Syntax.INTEL
             elif re.match(rb"[ \t]*\.att_syntax(?:[ \t]+(?:no)prefix)\Z", line, re.I):
                 config.syntax = X86Syntax.ATT
+
 
 if __name__ == "__main__":
     main()

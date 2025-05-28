@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TypeGuard
 import re
+import asm_re
 
 # Serialize Instruction instances into Intel or AT&T syntax
 # Assumes that caller will order operands for Instruction.operands in destination, source order
@@ -57,7 +58,7 @@ class Immediate:
 
 
 @dataclass
-class Label:
+class Constant:
     val: bytes
 
     def serialize_intel(self) -> bytes:
@@ -112,8 +113,8 @@ class EffectiveAddress:
     base: Register | None = None
     index: Register | None = None
     scale: int | None = None
-    displacement: int | Label | None = None
-    offset: Label | None = None
+    displacement: Constant | None = None
+    offset: Constant | None = None
 
     def serialize_intel(self) -> bytes:
         result: bytes = b""
@@ -130,12 +131,7 @@ class EffectiveAddress:
                 self.index.serialize_intel() + b"*" + str(self.scale).encode("ascii")
             )
         if self.displacement is not None:
-            if isinstance(self.displacement, int):
-                ea_components.append(hex(self.displacement).encode("ascii"))
-            elif isinstance(self.displacement, Label):
-                ea_components.append(self.displacement.serialize_intel())
-            else:
-                assert False
+            ea_components.append(self.displacement.serialize_intel())
         result += b"+".join(ea_components)
         result += b"]"
         return result
@@ -143,12 +139,7 @@ class EffectiveAddress:
     def serialize_att(self) -> bytes:
         result: bytes = b""
         if self.displacement is not None:
-            if isinstance(self.displacement, int):
-                result += hex(self.displacement).encode("ascii")
-            elif isinstance(self.displacement, Label):
-                result += self.displacement.serialize_att()
-            else:
-                assert False
+            result += self.displacement.serialize_att()
         if self.offset is not None:
             if self.displacement is not None:
                 result += b"+"
@@ -168,83 +159,91 @@ class EffectiveAddress:
 
     @staticmethod
     def deserialize_intel(
-        mem_prefix: bytes, memory_operand: bytes
+        unparsed_width: bytes | None, components: re.Match[bytes], operand_index: int
     ) -> "EffectiveAddress | None":
-        # Expects memory operand in format width [base+index*scale+displacement] or width displacement[base+index*scale]
-        # mem_prefix could be width or could be "offset label"
 
-        # Reformatting memory operand:
-        # Moving displacement to end if necessary
-        # Remove []
-        mem_op_reformatted: bytes = memory_operand
-        operand_parts: list[bytes] = memory_operand.translate(bytes(range(0x100)), b" \t").split(b"[")
-        if len(operand_parts) >= 2 and len(operand_parts[0]) > 0:
+        if components[f"operand_{operand_index}"] is None:
+            raise ValueError(f"Operand {operand_index} not found in match object")
 
-            # TODO: handle single-quoted []
-            assert len(operand_parts) == 2
+        permutation_num: int = 0
+        while permutation_num < len(asm_re.intel_permute_ea()):
+            if any(
+                f"permutation_{permutation_num}" in key
+                for key in {
+                    k: v for k, v in components.groupdict().items() if v is not None
+                }.keys()
+            ):
+                break
 
-            # Displacement is on the left
-            mem_op_reformatted = b"+".join(operand_parts[::-1])
+            permutation_num += 1
 
-        mem_op_reformatted = mem_op_reformatted.replace(b"[", b"").replace(b"]", b"")
+        print(permutation_num)
+        print({k: v for k, v in components.groupdict().items() if v is not None})
+      
 
-        offset: Label | None = None
         width: EAWidth | None = None
-        if b"offset" in mem_prefix:
-            offset = Label((mem_prefix.split()[1]).strip(b" \t"))
-        else:
-            width = (
-                EAWidth.deserialize_intel(mem_prefix.strip(b" \t"))
-                if len(mem_prefix.strip(b" \t")) > 0
-                else None
+        if unparsed_width is not None:
+            width = EAWidth.deserialize_intel(unparsed_width)
+
+        unparsed_base: bytes | None = None
+        try:
+            unparsed_base = components[f"operand_{operand_index}_permutation_{permutation_num}_base"]
+        except IndexError:
+            pass
+
+        base: Register | None = (
+            Register(unparsed_base) if unparsed_base is not None else None
+        )
+
+        unparsed_index: bytes | None = None
+        try:
+            unparsed_index = components[f"operand_{operand_index}_permutation_{permutation_num}_index"]
+        except IndexError:
+            pass
+
+        index: Register | None = (
+            Register(unparsed_index) if unparsed_index is not None else None
+        )
+
+        unparsed_scale: bytes | None = None
+        try:
+            unparsed_scale = components[
+                f"operand_{operand_index}_permutation_{permutation_num}_scale"
+            ]
+        except IndexError:
+            pass
+        
+        scale: int | None = (
+            parse_number(unparsed_scale) if unparsed_scale is not None else None
+        )
+
+        unparsed_mem_op_sequence: bytes | None = components[f"operand_{operand_index}_mem_op_sequence"]
+       
+        offset: Constant | None = None
+        if (
+            unparsed_mem_op_sequence is not None
+            and b"offset" in unparsed_mem_op_sequence
+        ):
+            # XXX: Assumes non-zero displacement in rip-relative moves
+            offset = Constant(
+                components[
+                    f"operand_{operand_index}_permutation_{permutation_num}_displacement"
+                ]
             )
 
-        # combinations:
-        # [base]
-        # [displacement]
-        # [base+displacement] or displacement[base]
-        # [index*scale+displacement] or displacement[index*scale]
-        # [base+index+displacement] or displacement[base+index]
-        # [base+index*scale+displacement] or displacement[base+index*scale]
-        # [base+index*scale] HANDLE
+        displacement: Constant | None = None
+        if offset is None:
+            unparsed_displacement: bytes | None = None
+            try:
+                unparsed_displacement = components[
+                    f"operand_{operand_index}_permutation_{permutation_num}_displacement"
+                ]
+            except IndexError:
+                pass
+            if unparsed_displacement is not None:
+                displacement = Constant(unparsed_displacement)
 
-        # TODO: Displacement can be a label
-        # If displacement is a label, assume that it will always be added
-        terms: list[bytes] = mem_op_reformatted.split(b"+")
-
-        # If both index and scale are present, set them
-        scale: int | None = None
-        index: Register | None = None
-        for term in terms:
-            if b"*" in term:
-                idx, scl = term.split(b"*")
-                index = Register(idx)
-                if is_number(scl):
-                    scale = parse_number(scl)
-                else:
-                    raise ValueError("Invalid scale")
-
-        # Case of having index, but no scale
-        if index is None and scale is None and len(terms) >= 3:
-            index = Register(terms[1])
-
-        # If there are multiple terms and (scale is not present, or there are 3 terms)
-        base: Register | None = None
-        if len(terms) > 1 and (scale is None or len(terms) == 3):
-            base = Register(terms[0])
-
-        # If displacement exists, it is always the last term
-        displacement: int | Label | None = None
-        if (len(terms) > 1 or is_number(terms[0])) and b"*" not in terms[-1]:
-
-            if is_number(terms[-1]):
-                displacement = parse_number(terms[-1])
-            else:
-                displacement = Label(terms[-1])
-        else:
-            # If displacement does not exist, base is the first term
-            base = Register(terms[0])
-
+        print(width, base, index, scale, displacement, offset)
         return EffectiveAddress(
             width=width,
             base=base,
@@ -256,158 +255,64 @@ class EffectiveAddress:
 
     @staticmethod
     def deserialize_att(
-        width_string: bytes, memory_operand: bytes
+        unparsed_width: bytes | None, components: re.Match[bytes], operand_index: int
     ) -> "EffectiveAddress | None":
 
+        if components[f"operand_{operand_index}"] is None:
+            raise ValueError(f"Operand {operand_index} not found in match object")
+
         width: EAWidth | None = None
-        # No width
-        if len(width_string) > 0:
-            width = EAWidth.deserialize_att(width_string)
+        if unparsed_width is not None:
+            width = EAWidth.deserialize_att(unparsed_width)
 
-        # Displacement may have to be an int
-        displacement: int | Label | None = None
-        base: Register | None = None
-        index: Register | None = None
-        scale: int | None = None
+        unparsed_base: bytes | None = components[f"operand_{operand_index}_base"]
+        base: Register | None = (
+            Register(unparsed_base) if unparsed_base is not None else None
+        )
 
-        # Combinations of components:
-        # (%base)
-        # displacement
-        # displacement(%base)
-        # displacement(%base,%index)
-        # displacement(%base,%index,scale)
-        # displacement(%index,scale)
-        # (%base,%index,scale)
+        unparsed_index: bytes | None = components[f"operand_{operand_index}_index"]
+        index: Register | None = (
+            Register(unparsed_index) if unparsed_index is not None else None
+        )
 
-        # Remove trailing operands
-        rightmost_comma_index: int
-        memory_op_clean: bytes = b"".join(memory_operand.split(b" "))
-        while (rightmost_comma_index := memory_op_clean.rfind(b",")) > memory_op_clean.rfind(b")"):
-            memory_op_clean = memory_op_clean[:rightmost_comma_index]
+        unparsed_scale: bytes | None = components[f"operand_{operand_index}_scale"]
+        scale: int | None = (
+            parse_number(unparsed_scale) if unparsed_scale is not None else None
+        )
 
-        # TODO: displacement can be a label
-        match memory_op_clean.split(b","):
-            # Cases may contain non-memory operands before the memory operand
-            # In att, it is generally not permitted to have more than one memory operand in a single instruction
+     
 
-            case [t1, t2, t3]:
-                # Contains:
-                # (%base,%index,scale)
-                # displacement(%base,%index,scale)
+        displacement: Constant | None = None
+        unparsed_displacement: bytes | None = components[
+            f"operand_{operand_index}_displacement"
+        ]
+        if unparsed_displacement is not None:
+            displacement = Constant(unparsed_displacement)
 
-                if not b"(" in t1:
-                    return None
 
-                disp, t1 = t1.split(b"(")
-
-                # Displacement must be able to be a hexadecimal
-                # Base is a register
-                if not is_register_att(t1):
-                    return None
-
-                # If displacement is not an int, assume it is a label
-                # Currently, something like fee is regarded as an int, not a label
-                # TODO: Change definition of hexadecimal to be preceded by 0x or 0X all the time
-                if len(disp) > 0:
-                    if is_number(disp):
-                        displacement = parse_number(disp)
-                    else:
-                        displacement = Label(disp)
-
-                base = Register(t1)
-
-                t3 = t3.strip(b")")
-                # Index is a register
-                # Scale is not an immediate; should be represented as hexadecimal
-                if not is_register_att(t2) or not is_number(t3):
-                    return None
-
-                index = Register(t2)
-                scale = int(t3, 16)
-
-            case [t1, t2]:
-                # Contains:
-                # displacement(%base,%index)
-                # displacement(%index,scale)
-
-                if not b"(" in t1:
-                    return None
-
-                # Separate Displacement from the base/index:
-                disp, t1 = t1.split(b"(")
-                t2 = t2.strip(b")")
-
-                # Displacement must be able to be a hexadecimal (not immediate)
-                # Base/Index is a register
-                if not is_register_att(t1):
-                    return None
-
-                # If displacement is not an int, assume it is a label
-                if len(disp) > 0:
-                    if is_number(disp):
-                        displacement = parse_number(disp)
-                    else:
-                        displacement = Label(disp)
-
-                if is_register_att(t2):  # displacement(%base, %index)
-                    base = Register(t1)
-                    index = Register(t2)
-                elif is_number(t2):  # displacement(%index, scale)
-                    index = Register(t1)
-                    scale = parse_number(t2)
-                else:
-                    return None
-
-            case [t1]:
-                # Contains:
-                # (%base)
-                # displacement
-                # displacement(%base)
-
-                if b"(" in t1:
-                    disp, t1 = t1.split(b"(")
-                    t1 = t1.strip(b")")
-
-                    if not is_register_att(t1):
-                        return None
-                    base = Register(t1)
-                else:
-                    disp = t1
-
-                # displacment will never be a register or immediate
-                if len(disp) > 0 and (is_register_att(disp) or disp.startswith(b"$")):
-                    return None
-
-                if len(disp) > 0:
-                    if is_number(disp):
-                        displacement = parse_number(disp)
-                    else:
-                        displacement = Label(disp)
-                else:
-                    displacement = None
-
-            case _:
-                return None
-
-        # Registers will have leading "%", which we must strip
         if base is not None:
             base.val = base.val.strip(b"%")
         if index is not None:
             index.val = index.val.strip(b"%")
-
+            
         return EffectiveAddress(
-            width=width, displacement=displacement, base=base, index=index, scale=scale
+            width=width,
+            base=base,
+            index=index,
+            scale=scale,
+            displacement=displacement,
+            offset=None,
         )
 
 
 @dataclass
 class JumpTarget:
-    val: EffectiveAddress | Label | Register | Immediate
+    val: EffectiveAddress | Constant | Register | Immediate
 
     def serialize_att(self) -> bytes:
         if isinstance(self.val, (Register, EffectiveAddress)):
             return b"*" + self.val.serialize_att()
-        if isinstance(self.val, (Label, Immediate)):
+        if isinstance(self.val, (Constant, Immediate)):
             return self.val.serialize_att()
         raise ValueError("This should never happen!")
 
@@ -417,9 +322,9 @@ class JumpTarget:
 
 def is_valid_operand_list(
     operands: list[object],
-) -> TypeGuard[list[Register | Immediate | Label | EffectiveAddress | JumpTarget]]:
+) -> TypeGuard[list[Register | Immediate | Constant | EffectiveAddress | JumpTarget]]:
     return all(
-        isinstance(op, (Register, Immediate, Label, EffectiveAddress, JumpTarget))
+        isinstance(op, (Register, Immediate, Constant, EffectiveAddress, JumpTarget))
         for op in operands
     )
 
@@ -427,7 +332,7 @@ def is_valid_operand_list(
 @dataclass
 class Instruction:
     mnemonic: bytes
-    operands: list[Register | Immediate | Label | EffectiveAddress | JumpTarget]
+    operands: list[Register | Immediate | Constant | EffectiveAddress | JumpTarget]
 
     def __init__(self, mnemonic: bytes, *operands: object):
         operand_list = list(operands)
