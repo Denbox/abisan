@@ -1,5 +1,4 @@
 .gdb_history
 *.o
-*.abisan.*
+*.abisan.s
 *.a
-*~
