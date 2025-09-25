@@ -73,9 +73,6 @@ class EAWidth(Enum):
     WORD_PTR = 1
     DWORD_PTR = 2
     QWORD_PTR = 3
-    XMMWORD_PTR = 4
-    YMMWORD_PTR = 5
-    ZMMWORD_PTR = 6
 
     def serialize_intel(self) -> bytes:
         return self.name.lower().replace("_", " ").encode("ascii")

@@ -58,7 +58,7 @@ _LINE_SUFFIX: str = rf"(?:[ \t]*{_COMMENT}?\n?)\Z"
 _INSTRUCTION_PREFIX: str = "(?:rep(?:n?[ez])?|lock|notrack|cs|data16|addr32)"
 
 # TODO: FWORD OWORD TBYTE MMWORD and so on
-_INTEL_WIDTH: str = r"(?:(?:byte|word|dword|qword|xmmword|ymmword|zmmword)(?:[ \t]+ptr)?)"
+_INTEL_WIDTH: str = r"(?:(?:byte|word|dword|qword)(?:[ \t]+ptr)?)"
 
 _INTEL_MEMORY_OPERAND_MODIFIER: str = rf"(?:{_INTEL_WIDTH}|offset)"
 

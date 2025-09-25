@@ -6,7 +6,7 @@ CFLAGS := -Wall -Wextra -Wpedantic -Wvla -O0 -std=c23
 all: libabisan_runtime.a
 
 fmt:
-	clang-format --style='{IndentWidth: 4, AllowShortFunctionsOnASingleLine: false}' -i *.c
+	clang-format --style='{ColumnLimit: 0, IndentWidth: 4, AllowShortFunctionsOnASingleLine: false}' -i *.c
 
 clean:
 	rm -rf *.a *.o __pycache__ && sh -c 'for thing in tests/*; do pushd "$$thing" && make clean && popd; done'
