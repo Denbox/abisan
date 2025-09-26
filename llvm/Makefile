@@ -12,4 +12,4 @@ clean:
 	rm -f abisan_llvm
 
 fmt:
-	clang-format -i --style='{ColumnLimit: 0, IndentWidth: 4, AllowShortFunctionsOnASingleLine: false}' *.?pp
+	clang-format -i --style='{ColumnLimit: 106, IndentWidth: 4, AllowShortFunctionsOnASingleLine: false}' *.?pp

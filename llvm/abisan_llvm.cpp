@@ -3,6 +3,7 @@
 #include <llvm/MC/MCAsmInfo.h>
 #include <llvm/MC/MCCodeEmitter.h>
 #include <llvm/MC/MCContext.h>
+#include <llvm/MC/MCDirectives.h>
 #include <llvm/MC/MCInstPrinter.h>
 #include <llvm/MC/MCInstrInfo.h>
 #include <llvm/MC/MCObjectFileInfo.h>
@@ -21,7 +22,8 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/TargetParser/Host.h>
-#include <vector> // for std::vector
+#include <unordered_set>
+#include <vector>
 
 using namespace llvm;
 
@@ -50,6 +52,9 @@ class ABISanStreamer : public MCStreamer {
     MCStreamer &underlying;
     MCInstrInfo const &instr_info;
     MCRegisterInfo const &register_info;
+    MCSubtargetInfo const &subtarget_info;
+
+    std::unordered_set<std::string> instrumented_function_names;
 
     unsigned get_taint_index(MCRegister const reg) {
         if (reg == X86::RAX) {
@@ -105,8 +110,8 @@ class ABISanStreamer : public MCStreamer {
         outs() << "\n";
         exit(1);
     }
-    unsigned
-    get_opcode(std::string const &mnemonic) {
+
+    unsigned get_opcode(std::string const &mnemonic) {
         for (unsigned int i = 0; i < instr_info.getNumOpcodes(); i++) {
             if (instr_info.getName(i).lower() == mnemonic) {
                 return i;
@@ -158,8 +163,9 @@ class ABISanStreamer : public MCStreamer {
         result.insert(result.end(), implicit_uses.begin(), implicit_uses.end());
         result.insert(result.end(), implicit_defs.begin(), implicit_defs.end());
         if (inst.getOpcode() == get_opcode("syscall")) {
-            result.push_back(X86::RCX);
-            result.push_back(X86::R11);
+            result.push_back(X86::RCX); // written
+            result.push_back(X86::R11); // written
+            result.push_back(X86::RAX); // read
         }
         return result;
     }
@@ -239,9 +245,18 @@ class ABISanStreamer : public MCStreamer {
         }
     }
 
+    std::string symbol_to_string(MCSymbol const *const symbol) {
+        StringRef symbol_name_stringref = symbol->getName();
+        std::string result;
+        result.assign(symbol_name_stringref.data(), symbol_name_stringref.size());
+        return result;
+    }
+
   public:
-    ABISanStreamer(MCStreamer &underlying, MCInstrInfo const &instr_info, MCRegisterInfo const &register_info)
-        : MCStreamer(underlying.getContext()), underlying(underlying), instr_info(instr_info), register_info(register_info) {
+    ABISanStreamer(MCStreamer &underlying, MCInstrInfo const &instr_info,
+                   MCRegisterInfo const &register_info, MCSubtargetInfo const &subtarget_info)
+        : MCStreamer(underlying.getContext()), underlying(underlying), instr_info(instr_info),
+          register_info(register_info), subtarget_info(subtarget_info) {
     }
 
     void emitInstruction(MCInst const &inst, MCSubtargetInfo const &subtarget_info) override {
@@ -263,14 +278,26 @@ class ABISanStreamer : public MCStreamer {
     }
 
     bool emitSymbolAttribute(MCSymbol *symbol, MCSymbolAttr attribute) override {
-        return underlying.emitSymbolAttribute(symbol, attribute);
+        bool const result = underlying.emitSymbolAttribute(symbol, attribute);
+
+        if (attribute == MCSA_Global &&
+            (!symbol->isInSection() ||
+             symbol->getSection().hasInstructions())) { // .globl and has code and is in an executable
+                                                        // section, or no section
+            // Really this should be a preprocessing pass, but in practice,
+            // people tend to declare .globl before the label.
+            // TODO: fix this.
+            instrumented_function_names.insert(symbol_to_string(symbol));
+        }
+        return result;
     }
 
     void emitCommonSymbol(MCSymbol *symbol, uint64_t size, Align alignment) override {
         underlying.emitCommonSymbol(symbol, size, alignment);
     }
 
-    void emitZerofill(MCSection *section, MCSymbol *symbol = nullptr, uint64_t size = 0, Align byte_alignment = Align(1), SMLoc loc = SMLoc()) override {
+    void emitZerofill(MCSection *section, MCSymbol *symbol = nullptr, uint64_t size = 0,
+                      Align byte_alignment = Align(1), SMLoc loc = SMLoc()) override {
         underlying.emitZerofill(section, symbol, size, byte_alignment, loc);
     }
 
@@ -278,17 +305,28 @@ class ABISanStreamer : public MCStreamer {
         // TODO: Use the underlying output stream
         // or use underlying.emitLabel, but this was segfaulting for some reason :(
         outs() << symbol->getName() << ":\n";
+        for (auto const &instrumented_function_name : instrumented_function_names) {
+            if (symbol_to_string(symbol) == instrumented_function_name) {
+                outs() << "\tcall abisan_function_entry\n";
+            } else {
+                errs() << symbol_to_string(symbol) << " != " << instrumented_function_name << "\n";
+            }
+        }
     }
 
     void emitBytes(StringRef str) override {
         underlying.emitBytes(str);
+    }
+
+    void switchSection(MCSection *section, uint32_t subsection = 0) override {
+        underlying.switchSection(section, subsection);
     }
 };
 
 int main(int argc, char **argv) {
     if (argc < 2) {
         outs() << "Usage: " << argv[0] << " <file.s>\n";
-        return 1;
+        exit(1);
     }
 
     InitializeAllTargetInfos();
@@ -301,49 +339,51 @@ int main(int argc, char **argv) {
 
     if (!target) {
         outs() << "Failed to lookup target: " << error << "\n";
-        return 1;
+        exit(1);
     }
 
-    MCTargetOptions MCOptions;
+    MCTargetOptions options;
     std::unique_ptr<MCRegisterInfo> register_info(target->createMCRegInfo(triple_name));
-    std::unique_ptr<MCAsmInfo> asm_info(
-        target->createMCAsmInfo(*register_info, triple_name, MCOptions));
-    std::unique_ptr<MCSubtargetInfo> subtarget_info(
-        target->createMCSubtargetInfo(triple_name, "", ""));
+    std::unique_ptr<MCAsmInfo> asm_info(target->createMCAsmInfo(*register_info, triple_name, options));
+    std::unique_ptr<MCSubtargetInfo> subtarget_info(target->createMCSubtargetInfo(triple_name, "", ""));
     std::unique_ptr<MCInstrInfo> instr_info(target->createMCInstrInfo());
     llvm::SourceMgr src_mgr;
 
     auto buffer_or_error = MemoryBuffer::getFile(argv[1]);
     if (!buffer_or_error) {
         outs() << "Error reading file: " << argv[1] << "\n";
-        return 1;
+        exit(1);
     }
     src_mgr.AddNewSourceBuffer(std::move(*buffer_or_error), SMLoc());
 
     MCContext ctx(Triple(triple_name), asm_info.get(), register_info.get(), subtarget_info.get(),
                   &src_mgr);
-    auto mofi = std::make_unique<MCObjectFileInfo>();
-    mofi->initMCObjectFileInfo(ctx, false);
-    ctx.setObjectFileInfo(mofi.get());
+    auto object_file_info = std::make_unique<MCObjectFileInfo>();
+    object_file_info->initMCObjectFileInfo(ctx, false);
+    ctx.setObjectFileInfo(object_file_info.get());
 
-    auto fos = std::make_unique<formatted_raw_ostream>(outs());
-    auto *ip = target->createMCInstPrinter(Triple(triple_name), asm_info->getAssemblerDialect(), *asm_info, *instr_info, *register_info);
-    std::unique_ptr<MCAsmBackend> tab(target->createMCAsmBackend(*subtarget_info, *register_info, MCOptions));
-    auto base_streamer(target->createAsmStreamer(ctx, std::move(fos), ip, std::unique_ptr<MCCodeEmitter>(), std::move(tab)));
-    auto streamer = std::make_unique<ABISanStreamer>(*base_streamer, *instr_info, *register_info);
+    std::unique_ptr<MCAsmBackend> asm_backend(
+        target->createMCAsmBackend(*subtarget_info, *register_info, options));
+    auto base_streamer(target->createAsmStreamer(
+        ctx, std::make_unique<formatted_raw_ostream>(outs()),
+        target->createMCInstPrinter(Triple(triple_name), asm_info->getAssemblerDialect(), *asm_info,
+                                    *instr_info, *register_info),
+        std::unique_ptr<MCCodeEmitter>(), std::move(asm_backend)));
+    auto streamer =
+        std::make_unique<ABISanStreamer>(*base_streamer, *instr_info, *register_info, *subtarget_info);
     streamer->initSections(false, *subtarget_info);
 
     auto parser(createMCAsmParser(src_mgr, ctx, *streamer, *asm_info));
-    auto target_parser(target->createMCAsmParser(*subtarget_info, *parser, *instr_info, MCOptions));
+    auto target_parser(target->createMCAsmParser(*subtarget_info, *parser, *instr_info, options));
 
     if (!target_parser) {
         outs() << "No target-specific asm parser for " << triple_name << "\n";
-        return 1;
+        exit(1);
     }
 
     parser->setTargetParser(*target_parser);
     if (parser->Run(false)) {
         outs() << "Failed to parse assembly.\n";
-        return 1;
+        exit(1);
     }
 }
