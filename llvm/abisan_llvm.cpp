@@ -369,8 +369,7 @@ int main(int argc, char **argv) {
         target->createMCInstPrinter(Triple(triple_name), asm_info->getAssemblerDialect(), *asm_info,
                                     *instr_info, *register_info),
         std::unique_ptr<MCCodeEmitter>(), std::move(asm_backend)));
-    auto streamer =
-        std::make_unique<ABISanStreamer>(*base_streamer, *instr_info, *register_info, *subtarget_info);
+    auto streamer = std::make_unique<ABISanStreamer>(*base_streamer, *instr_info, *register_info, *subtarget_info);
     streamer->initSections(false, *subtarget_info);
 
     auto parser(createMCAsmParser(src_mgr, ctx, *streamer, *asm_info));
